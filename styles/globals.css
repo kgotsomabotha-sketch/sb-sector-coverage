@@ -313,3 +313,20 @@ option {
     font-size: 14px;
   }
 }
+@media (max-width: 768px) {
+  body { font-size: 13px; }
+  
+  .sidebar { display: none; }
+  
+  .main-content { width: 100%; padding: 12px; }
+  
+  h1 { font-size: 20px; }
+  h2 { font-size: 16px; }
+  
+  [style*="gridTemplateColumns"] { 
+    grid-template-columns: 1fr !important; 
+  }
+  
+  table { font-size: 11px; }
+  textarea, input { font-size: 14px !important; }
+}
