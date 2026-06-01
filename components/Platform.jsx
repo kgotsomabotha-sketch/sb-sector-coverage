@@ -591,7 +591,7 @@ function SectorCommand({ onNav, pipeline }) {
               <div style={{ fontSize: 10, color: "#f87171" }}>{metrics.stalledDeals} deals stuck in early stages. Review and escalate.</div>
             </div>
           )}
-        </Card>
+       </Card>
       </div>
     </div>
   );
