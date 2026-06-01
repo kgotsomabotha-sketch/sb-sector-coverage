@@ -1,5 +1,8 @@
+"use client";
+
 import OutputFormatter from "./OutputFormatter";
-import { useState, useEffect } from "react"; import FinancialHealthScreener from "./FinancialHealthScreener";
+import { useState, useEffect } from "react";
+import FinancialHealthScreener from "./FinancialHealthScreener";
 import MarketDashboard from "./MarketDashboard";
 import ProjectDelaysTracker from "./ProjectDelaysTracker";
 
