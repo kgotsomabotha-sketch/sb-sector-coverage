@@ -368,18 +368,22 @@ function SectorIntelligence({ onBriefReady }) {
 
   async function generate() {
     const areas = FOCUS.filter((_,i)=>on[i]).join("; ");
-    setLoading(true); setBrief(""); setStatus({t:"load",msg:"Conducting sector research via live web search…"});
+    setLoading(true); setBrief(""); setStatus({t:"load",msg:"Analysing sector opportunities…"});
     try {
-     const t = await callClaude(
-  `3 bullet points on SA energy news today. Format: • [TOPIC]: [1 sentence].`,
-  `Latest SA energy news. Topics: ${areas}.`, true, 200
-);
-      setBrief(t); onBriefReady(t);
+      const t = await callClaude(
+        `Provide 5 detailed bullet points on SA energy & infrastructure sector insights. Format: • [HEADLINE]: [2-3 sentences analyzing impact and opportunity].`,
+        `Analyze current developments in SA energy & infrastructure across: ${areas}. Focus on deal opportunities, financing gaps, and market trends.`, 
+        false, 
+        700
+      );
+      setBrief(t); 
+      onBriefReady(t);
       setStatus({t:"ok",msg:`Sector intelligence report generated — ${TODAY}`});
-    } catch(e) { setStatus({t:"err",msg:e.message}); }
+    } catch(e) { 
+      setStatus({t:"err",msg:e.message}); 
+    }
     setLoading(false);
   }
-
   return (
     <div>
       <Card style={{marginBottom:14}}>
