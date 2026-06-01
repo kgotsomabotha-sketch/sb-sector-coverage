@@ -186,83 +186,416 @@ const Sel = ({ value, onChange, options, style={} }) => (
 );
 
 // ════════════════════════════════════════════════════════════════════════════
-// MODULE 1: SECTOR COMMAND
+// MODULE 1: SECTOR COMMAND — Performance Dashboard with Live Market Data
 // ════════════════════════════════════════════════════════════════════════════
 function SectorCommand({ onNav, pipeline }) {
-  const [pulse, setPulse] = useState("");
+  const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(false);
-  const tier1 = COVERAGE.filter(c=>c.tier==="TIER 1").length;
-  const distressed = COVERAGE.filter(c=>["DISTRESSED","STRESSED"].includes(c.health)).length;
-  const active = pipeline.filter(d=>!["Won","Lost"].includes(d.status)).length;
-  const highP = pipeline.filter(d=>d.priority==="HIGH").length;
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [marketData, setMarketData] = useState(null);
+  const [marketLoading, setMarketLoading] = useState(false);
 
-  async function loadPulse() {
-    setLoading(true);
+  // Calculate real-time metrics from pipeline data
+  const calculateMetrics = () => {
+    const totalDeals = pipeline.length;
+    const wonDeals = pipeline.filter(d => d.status === "Won").length;
+    const lostDeals = pipeline.filter(d => d.status === "Lost").length;
+    const activeDeals = pipeline.filter(d => !["Won", "Lost"].includes(d.status)).length;
+    const highPriorityActive = pipeline.filter(d => d.priority === "HIGH" && !["Won", "Lost"].includes(d.status)).length;
+    
+    const winRate = wonDeals + lostDeals > 0 ? (wonDeals / (wonDeals + lostDeals)) * 100 : 0;
+    
+    // Parse fee estimates
+    const totalFeeOpportunity = pipeline.reduce((sum, deal) => {
+      if (deal.fee_estimate) {
+        const match = deal.fee_estimate.match(/R(\d+[-–]?\d*)/);
+        if (match) {
+          const avg = match[1].includes('-') 
+            ? match[1].split('-').reduce((a,b) => (parseInt(a) + parseInt(b)) / 2, 0)
+            : parseInt(match[1]);
+          return sum + (isNaN(avg) ? 0 : avg);
+        }
+      }
+      return sum;
+    }, 0);
+    
+    const byStage = {
+      New: pipeline.filter(d => d.status === "New").length,
+      Researching: pipeline.filter(d => d.status === "Researching").length,
+      Called: pipeline.filter(d => d.status === "Called").length,
+      Pitched: pipeline.filter(d => d.status === "Pitched").length,
+      Mandate: pipeline.filter(d => d.status === "Mandate").length,
+      Won: wonDeals,
+      Lost: lostDeals
+    };
+    
+    const topDeals = [...pipeline]
+      .filter(d => d.status !== "Won" && d.status !== "Lost")
+      .sort((a,b) => {
+        const priorityOrder = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+        return priorityOrder[b.priority] - priorityOrder[a.priority];
+      })
+      .slice(0, 5);
+    
+    const stalledDeals = pipeline.filter(d => ["New", "Researching"].includes(d.status)).length;
+    
+    const tier1Count = COVERAGE.filter(c => c.tier === "TIER 1").length;
+    const coverageWithContact = COVERAGE.filter(c => c.contact && c.contact !== "").length;
+    const highPotentialCoverage = COVERAGE.filter(c => c.potential === "HIGH").length;
+    
+    return {
+      totalDeals, activeDeals, wonDeals, winRate, totalFeeOpportunity,
+      byStage, topDeals, stalledDeals, highPriorityActive,
+      tier1Coverage: { total: tier1Count, withContact: coverageWithContact, highPotential: highPotentialCoverage }
+    };
+  };
+
+  // FREE LIVE MARKET DATA - Exchange Rates (no API key)
+  async function fetchExchangeRates() {
     try {
-      const t = await callClaude(
-  `4 bullet points on SA energy news today. Format: • [TOPIC]: [1 sentence].`,
-  "Search latest SA energy sector news today.", true, 300
-);
-      setPulse(t);
-    } catch(e) { setPulse("Error loading pulse: " + e.message); }
-    setLoading(false);
+      const response = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=ZAR,EUR,GBP");
+      const data = await response.json();
+      return { usdZar: data.rates?.ZAR || 19.20, usdEur: data.rates?.EUR, timestamp: data.date };
+    } catch (error) {
+      console.error("Exchange rate fetch failed:", error);
+      return null;
+    }
   }
 
-  useEffect(() => { loadPulse(); }, []);
+  // FREE LIVE MARKET DATA - Commodity Prices (via Yahoo Finance CORS proxy)
+  async function fetchCommodities() {
+    try {
+      // Using Yahoo Finance's public API (no key needed)
+      const symbols = ["BZ=F", "CL=F", "NG=F"]; // Brent, WTI, Natural Gas
+      const results = { brentCrude: null, wtiCrude: null, naturalGas: null };
+      
+      for (const symbol of symbols) {
+        const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
+        if (response.ok) {
+          const data = await response.json();
+          const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+          if (symbol === "BZ=F") results.brentCrude = price;
+          if (symbol === "CL=F") results.wtiCrude = price;
+          if (symbol === "NG=F") results.naturalGas = price;
+        }
+      }
+      return results;
+    } catch (error) {
+      console.error("Commodity fetch failed:", error);
+      return null;
+    }
+  }
 
-  const stats = [
-    { l:"Coverage Universe", v:COVERAGE.length, c:"#c9a84c", sub:"companies tracked" },
-    { l:"Tier 1 Clients", v:tier1, c:"#3b82f6", sub:"priority relationships" },
-    { l:"Distressed / Stressed", v:distressed, c:"#ef4444", sub:"restructuring signals" },
-    { l:"Active Pipeline", v:active, c:"#10b981", sub:`${highP} high priority` },
+  // Load all live market data
+  async function loadLiveMarketData() {
+    setMarketLoading(true);
+    try {
+      const [exchangeRates, commodities] = await Promise.all([
+        fetchExchangeRates(),
+        fetchCommodities()
+      ]);
+      setMarketData({
+        exchangeRates,
+        commodities,
+        lastUpdated: new Date().toLocaleTimeString()
+      });
+    } catch (error) {
+      console.error("Market data failed:", error);
+    } finally {
+      setMarketLoading(false);
+    }
+  }
+
+  // Refresh all metrics
+  const refreshMetrics = () => {
+    setLoading(true);
+    setTimeout(() => {
+      setMetrics(calculateMetrics());
+      setLastUpdated(new Date().toLocaleTimeString());
+      setLoading(false);
+    }, 300);
+  };
+
+  // Auto-load on mount
+  useEffect(() => {
+    setMetrics(calculateMetrics());
+    setLastUpdated(new Date().toLocaleTimeString());
+    loadLiveMarketData();
+  }, [pipeline]);
+
+  if (!metrics) return <div style={{ padding: 40, textAlign: "center" }}><Spinner /> Loading dashboard...</div>;
+
+  const stageFunnel = [
+    { name: "New", value: metrics.byStage.New, color: "#6b7280" },
+    { name: "Researching", value: metrics.byStage.Researching, color: "#3b82f6" },
+    { name: "Called", value: metrics.byStage.Called, color: "#8b5cf6" },
+    { name: "Pitched", value: metrics.byStage.Pitched, color: "#f59e0b" },
+    { name: "Mandate", value: metrics.byStage.Mandate, color: "#10b981" },
+    { name: "Won", value: metrics.byStage.Won, color: "#059669" }
   ];
 
   return (
     <div>
-      <div style={{background:"linear-gradient(135deg,#111827 0%,#0d1520 100%)",border:"1px solid #1e2535",borderRadius:6,padding:"24px",marginBottom:24,animation:"fadeIn 0.5s ease-out"}}>
-  <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c9a84c",letterSpacing:"2px",textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Standard Bank CIB</div>
-  <h1 style={{fontSize:32,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#fff",marginBottom:2}}>Sector Coverage Intelligence</h1>
-  <h4 style={{fontSize:12,color:"#9ca3af",fontFamily:"'IBM Plex Mono',monospace",fontWeight:400,textTransform:"none",letterSpacing:"0",marginTop:6}}>{TODAY} · Live intelligence, origination & pitchbook system</h4>
-</div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
-        {stats.map((s,idx)=>(
-  <Card key={s.l} style={{textAlign:"center",padding:"16px 10px",background:"linear-gradient(135deg,#111827 0%,#0d1520 100%)",borderColor:s.c,animation:`fadeIn 0.5s ease-out ${idx * 0.1}s both`}}>
-    <div style={{fontSize:28,fontFamily:"'Syne',sans-serif",fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
-    <div style={{fontSize:11,color:"#f3f4f6",fontFamily:"'Syne',sans-serif",fontWeight:600,marginTop:6}}>{s.l}</div>
-    <div style={{fontSize:10,color:"#6b7280",marginTop:2,fontFamily:"'IBM Plex Mono',monospace"}}>{s.sub}</div>
-  </Card>
-))}
-      </div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-        <Card>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <SL>Live Sector Pulse</SL>
-            <button onClick={loadPulse} disabled={loading} style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:"transparent",border:"1px solid #1e2535",color:"#6b7280",padding:"3px 8px",borderRadius:2,cursor:"pointer"}}>{loading?"…":"↺ Refresh"}</button>
+      {/* Header */}
+      <div style={{
+        background: "linear-gradient(135deg, #0a0e17 0%, #0d1520 100%)",
+        border: "1px solid #1e2535",
+        borderRadius: 12,
+        padding: "28px 32px",
+        marginBottom: 24
+      }}>
+        <div style={{ fontSize: 11, fontFamily: "'IBM Plex Mono', monospace", color: "#c9a84c", letterSpacing: "2px", marginBottom: 8 }}>
+          Standard Bank CIB
+        </div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+          <div>
+            <h1 style={{ fontSize: 32, fontFamily: "'Syne', sans-serif", fontWeight: 800, color: "#fff", marginBottom: 4 }}>
+              Sector Command Dashboard
+            </h1>
+            <h4 style={{ fontSize: 12, color: "#9ca3af", fontFamily: "'IBM Plex Mono', monospace", fontWeight: 400, margin: 0 }}>
+              {TODAY} · Deal pipeline velocity & live market intelligence
+            </h4>
           </div>
-          {loading && !pulse ? (
-            <div style={{display:"flex",gap:10,color:"#6b7280",fontSize:12,alignItems:"center"}}><Spinner/> Scanning live markets…</div>
-          ) : <Out text={pulse} style={{maxHeight:180,fontSize:12.5}}/>}
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {lastUpdated && (
+              <div style={{ fontSize: 9, color: "#4b5563", fontFamily: "'IBM Plex Mono', monospace" }}>
+                Updated: {lastUpdated}
+              </div>
+            )}
+            <button
+              onClick={() => { refreshMetrics(); loadLiveMarketData(); }}
+              disabled={loading || marketLoading}
+              style={{
+                fontSize: 10,
+                fontFamily: "'IBM Plex Mono', monospace",
+                background: "transparent",
+                border: "1px solid #1e2535",
+                color: "#6b7280",
+                padding: "6px 14px",
+                borderRadius: 6,
+                cursor: "pointer"
+              }}
+            >
+              {loading || marketLoading ? "⟳" : "↺ Refresh All"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 1: Key Performance Indicators */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14, marginBottom: 20 }}>
+        <Card style={{ textAlign: "center", padding: "20px 12px" }}>
+          <div style={{ fontSize: 34, fontWeight: 800, color: "#c9a84c", fontFamily: "'Syne', sans-serif" }}>{metrics.activeDeals}</div>
+          <div style={{ fontSize: 11, color: "#f3f4f6", fontWeight: 500, marginTop: 6 }}>Active Deals</div>
+          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 2 }}>{metrics.highPriorityActive} high priority</div>
         </Card>
+        <Card style={{ textAlign: "center", padding: "20px 12px" }}>
+          <div style={{ fontSize: 34, fontWeight: 800, color: "#10b981", fontFamily: "'Syne', sans-serif" }}>{metrics.winRate.toFixed(0)}%</div>
+          <div style={{ fontSize: 11, color: "#f3f4f6", fontWeight: 500, marginTop: 6 }}>Win Rate</div>
+          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 2 }}>{metrics.byStage.Won} won / {metrics.byStage.Lost} lost</div>
+        </Card>
+        <Card style={{ textAlign: "center", padding: "20px 12px" }}>
+          <div style={{ fontSize: 34, fontWeight: 800, color: "#3b82f6", fontFamily: "'Syne', sans-serif" }}>R{Math.round(metrics.totalFeeOpportunity / 1000)}M</div>
+          <div style={{ fontSize: 11, color: "#f3f4f6", fontWeight: 500, marginTop: 6 }}>Total Fee Pipeline</div>
+          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 2 }}>estimated opportunity</div>
+        </Card>
+        <Card style={{ textAlign: "center", padding: "20px 12px" }}>
+          <div style={{ fontSize: 34, fontWeight: 800, color: metrics.stalledDeals > 3 ? "#ef4444" : "#6b7280", fontFamily: "'Syne', sans-serif" }}>{metrics.stalledDeals}</div>
+          <div style={{ fontSize: 11, color: "#f3f4f6", fontWeight: 500, marginTop: 6 }}>Stalled / Stuck</div>
+          <div style={{ fontSize: 9, color: "#6b7280", marginTop: 2 }}>needs attention</div>
+        </Card>
+      </div>
+
+      {/* Row 2: Live Market Data Widget */}
+      <Card style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <SL>Live Market Data</SL>
+          <button
+            onClick={loadLiveMarketData}
+            disabled={marketLoading}
+            style={{ fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", background: "transparent", border: "1px solid #1e2535", color: "#6b7280", padding: "3px 10px", borderRadius: 4, cursor: "pointer" }}
+          >
+            {marketLoading ? "⟳" : "↺ Refresh"}
+          </button>
+        </div>
+        
+        {marketData?.exchangeRates || marketData?.commodities ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+            <div style={{ textAlign: "center", padding: "10px", background: "#090c12", borderRadius: 8 }}>
+              <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "'IBM Plex Mono', monospace" }}>USD/ZAR</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: (marketData.exchangeRates?.usdZar || 0) > 19 ? "#ef4444" : "#10b981" }}>
+                {marketData.exchangeRates?.usdZar?.toFixed(2) || "—"}
+              </div>
+              <div style={{ fontSize: 8, color: "#4b5563" }}>live forex</div>
+            </div>
+            <div style={{ textAlign: "center", padding: "10px", background: "#090c12", borderRadius: 8 }}>
+              <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "'IBM Plex Mono', monospace" }}>Brent Crude</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#f59e0b" }}>
+                ${marketData.commodities?.brentCrude?.toFixed(2) || "—"}
+              </div>
+              <div style={{ fontSize: 8, color: "#4b5563" }}>/bbl</div>
+            </div>
+            <div style={{ textAlign: "center", padding: "10px", background: "#090c12", borderRadius: 8 }}>
+              <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "'IBM Plex Mono', monospace" }}>WTI Crude</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#f59e0b" }}>
+                ${marketData.commodities?.wtiCrude?.toFixed(2) || "—"}
+              </div>
+              <div style={{ fontSize: 8, color: "#4b5563" }}>/bbl</div>
+            </div>
+            <div style={{ textAlign: "center", padding: "10px", background: "#090c12", borderRadius: 8 }}>
+              <div style={{ fontSize: 9, color: "#6b7280", fontFamily: "'IBM Plex Mono', monospace" }}>Natural Gas</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: "#3b82f6" }}>
+                ${marketData.commodities?.naturalGas?.toFixed(2) || "—"}
+              </div>
+              <div style={{ fontSize: 8, color: "#4b5563" }}>/MMBtu</div>
+            </div>
+          </div>
+        ) : (
+          <div style={{ textAlign: "center", padding: "30px", color: "#4b5563", fontSize: 12 }}>
+            {marketLoading ? "Loading live market data..." : "Click refresh to load live exchange rates & commodities"}
+          </div>
+        )}
+        
+        {marketData?.lastUpdated && (
+          <div style={{ marginTop: 10, fontSize: 8, color: "#4b5563", textAlign: "right", fontFamily: "'IBM Plex Mono', monospace" }}>
+            Updated: {marketData.lastUpdated} · Free API
+          </div>
+        )}
+      </Card>
+
+      {/* Row 3: Pipeline Funnel + Coverage Health */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        {/* Deal Funnel */}
         <Card>
-          <SL>Navigate to Module</SL>
-          {MODS.slice(1).map(m=>(
-            <button key={m.id} onClick={()=>onNav(m.id)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#090c12",border:"1px solid #1e2535",borderRadius:4,padding:"9px 12px",cursor:"pointer",marginBottom:6,transition:"border-color .15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#2a3147"} onMouseLeave={e=>e.currentTarget.style.borderColor="#1e2535"}>
-              <div style={{display:"flex",alignItems:"center",gap:10}}>
-                <span style={{color:"#c9a84c",fontSize:13}}>{m.icon}</span>
-                <div style={{textAlign:"left"}}>
-                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:12,fontWeight:600,color:"#e8eaf0"}}>{m.label}</div>
-                  <div style={{fontSize:10,color:"#4b5563",fontFamily:"'IBM Plex Mono',monospace"}}>{m.jd}</div>
+          <SL>Deal Pipeline Funnel</SL>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {stageFunnel.map((stage, idx) => {
+              const maxValue = Math.max(...stageFunnel.map(s => s.value), 1);
+              const widthPercent = (stage.value / maxValue) * 100;
+              return (
+                <div key={stage.name}>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: "#9ca3af", fontFamily: "'IBM Plex Mono', monospace" }}>{stage.name}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: stage.color }}>{stage.value}</span>
+                  </div>
+                  <div style={{ background: "#1a1f2a", borderRadius: 4, overflow: "hidden" }}>
+                    <div style={{ width: `${widthPercent}%`, height: 6, background: stage.color, borderRadius: 4, transition: "width 0.5s ease" }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid #1e2535", fontSize: 10, color: "#4b5563", fontFamily: "'IBM Plex Mono', monospace" }}>
+            Total pipeline: {metrics.totalDeals} deals · {metrics.byStage.Mandate} at mandate
+          </div>
+        </Card>
+
+        {/* Coverage Universe Health */}
+        <Card>
+          <SL>Coverage Universe Health</SL>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 16 }}>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#c9a84c", fontFamily: "'Syne', sans-serif" }}>{metrics.tier1Coverage.total}</div>
+              <div style={{ fontSize: 10, color: "#6b7280" }}>Tier 1 Clients</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#3b82f6", fontFamily: "'Syne', sans-serif" }}>{metrics.tier1Coverage.withContact}</div>
+              <div style={{ fontSize: 10, color: "#6b7280" }}>Active Contacts</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#f59e0b", fontFamily: "'Syne', sans-serif" }}>{metrics.tier1Coverage.highPotential}</div>
+              <div style={{ fontSize: 10, color: "#6b7280" }}>High Potential</div>
+            </div>
+            <div>
+              <div style={{ fontSize: 28, fontWeight: 800, color: "#10b981", fontFamily: "'Syne', sans-serif" }}>{COVERAGE.length}</div>
+              <div style={{ fontSize: 10, color: "#6b7280" }}>Total Companies</div>
+            </div>
+          </div>
+          <div style={{ background: "#090c12", borderRadius: 6, padding: "10px 12px" }}>
+            <div style={{ fontSize: 10, color: "#c9a84c", fontFamily: "'IBM Plex Mono', monospace", marginBottom: 4 }}>COVERAGE GAPS</div>
+            <div style={{ fontSize: 10, color: "#9ca3af", lineHeight: 1.5 }}>
+              • Battery storage project sponsors<br />
+              • Cross-border transmission developers<br />
+              • Green hydrogen producers
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Row 4: Top Active Deals + Quick Actions */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+        <Card>
+          <SL>High Priority Active Deals</SL>
+          {metrics.topDeals.length === 0 ? (
+            <div style={{ textAlign: "center", padding: "30px", color: "#4b5563", fontSize: 12 }}>
+              No active high-priority deals.
+            </div>
+          ) : (
+            metrics.topDeals.map((deal, idx) => (
+              <div key={idx} style={{
+                padding: "12px 0",
+                borderBottom: idx < metrics.topDeals.length - 1 ? "1px solid #1a2032" : "none",
+                cursor: "pointer"
+              }} onClick={() => onNav("pipeline")}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <Tag c={PCOL[deal.priority]} bg={`${PCOL[deal.priority]}15`} style={{ fontSize: 8 }}>{deal.priority}</Tag>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: "#f3f4f6" }}>{deal.title?.slice(0, 38)}...</span>
+                  </div>
+                  <Tag c={SCOL[deal.status]} bg={`${SCOL[deal.status]}15`} style={{ fontSize: 8 }}>{deal.status}</Tag>
+                </div>
+                <div style={{ fontSize: 10, color: "#6b7280", fontFamily: "'IBM Plex Mono', monospace" }}>
+                  {deal.company} · {deal.deal_type} · Fee: {deal.fee_estimate || "TBD"}
                 </div>
               </div>
-              <span style={{color:"#2a3147",fontSize:14}}>→</span>
-            </button>
-          ))}
+            ))
+          )}
+          <button onClick={() => onNav("pipeline")} style={{
+            width: "100%", marginTop: 12, padding: "8px", background: "transparent",
+            border: "1px solid #1e2535", borderRadius: 6, color: "#6b7280",
+            fontSize: 10, fontFamily: "'IBM Plex Mono', monospace", cursor: "pointer"
+          }}>
+            View Full Pipeline →
+          </button>
+        </Card>
+
+        <Card>
+          <SL>Quick Actions</SL>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {[
+              { id: "intel", icon: "◉", label: "Generate Sector Intelligence", desc: "Run research on Eskom, REIPPPP, Transnet" },
+              { id: "origination", icon: "◎", label: "Origination Engine", desc: "Score and capture new deal opportunities" },
+              { id: "pitchbook", icon: "◆", label: "Pitchbook Builder", desc: "Create client-ready pitch decks" }
+            ].map(action => (
+              <button key={action.id} onClick={() => onNav(action.id)} style={{
+                width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                background: "#090c12", border: "1px solid #1e2535", borderRadius: 8,
+                padding: "12px 16px", cursor: "pointer", transition: "all 0.2s"
+              }} onMouseEnter={e => { e.currentTarget.style.borderColor = "#c9a84c"; e.currentTarget.style.background = "#0f1420"; }}
+                 onMouseLeave={e => { e.currentTarget.style.borderColor = "#1e2535"; e.currentTarget.style.background = "#090c12"; }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <span style={{ fontSize: 16 }}>{action.icon}</span>
+                  <div style={{ textAlign: "left" }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "#e8eaf0" }}>{action.label}</div>
+                    <div style={{ fontSize: 9, color: "#4b5563" }}>{action.desc}</div>
+                  </div>
+                </div>
+                <span>→</span>
+              </button>
+            ))}
+          </div>
+
+          {metrics.stalledDeals > 3 && (
+            <div style={{ marginTop: 14, padding: "10px 12px", background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", borderRadius: 6, display: "flex", alignItems: "center", gap: 8 }}>
+              <span style={{ fontSize: 14 }}>⚠️</span>
+              <div style={{ fontSize: 10, color: "#f87171" }}>{metrics.stalledDeals} deals stuck in early stages. Review and escalate.</div>
+            </div>
+          )}
         </Card>
       </div>
     </div>
   );
 }
-
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 2: COVERAGE UNIVERSE
 // ════════════════════════════════════════════════════════════════════════════
