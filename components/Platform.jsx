@@ -631,7 +631,6 @@ function CoverageUniverse({ onAddToPipeline }) {
       const opportunityAreas = company.opportunity.split("/");
       const primaryOpp = opportunityAreas[0].trim();
       
-      // Build sector-specific deep dive content
       let sectorContext = "";
       let risks = "";
       let nextSteps = "";
@@ -652,11 +651,6 @@ function CoverageUniverse({ onAddToPipeline }) {
         risks = `FID delays beyond 2026, local content renegotiations (Namibia), cross-border regulatory complexity, and Brent crude price volatility (currently ${marketContext.split(": ")[1] || "range-bound"} impacting project economics).`;
         nextSteps = `Priority actions: (1) Secure lead arranger mandate for Namibia Venus ($500m underwrite), (2) Position for Mozambique LNG local currency tranche (R2-6bn annually through 2029), (3) Develop cross-border hedging solutions for oil majors.`;
         marketSignals = `• Brent crude: live market price\n• Venus FID: Q2-Q3 2026 decision\n• Mopane appraisal: 3-well campaign ongoing`;
-      } else if (company.sector.includes("Mining") || company.sector.includes("Mineral")) {
-        sectorContext = `Critical minerals financing is surging across SADC. Botswana lithium ramp-up to 50,000 tpa by 2027 (R2.5bn capex). Zambia copper production increase with debt restructuring. DRC cobalt processing moving to South Africa. Global energy transition demand for battery metals is projected to grow 400% by 2030.`;
-        risks = `Commodity price volatility (lithium down 35% from 2024 peak), off-take agreement stability, cross-border logistics constraints, and ESG compliance requirements for export financing.`;
-        nextSteps = `Priority actions: (1) Structure streaming deals for lithium offtake, (2) Lead project finance syndication for copper expansion, (3) Provide commodity hedging and trade finance solutions.`;
-        marketSignals = `• EV adoption accelerating globally\n• SA processing incentives under review\n• DFI critical minerals facility available`;
       } else {
         sectorContext = `${company.company} operates in South Africa's ${company.sector} sector. The company has been identified as a ${company.tier} priority with ${company.potential} deal potential. ${company.note || "Key relationship to develop for infrastructure financing opportunities."}`;
         risks = `Competitor pressure from international banks, execution capacity constraints, and regulatory environment requiring active monitoring.`;
@@ -816,9 +810,15 @@ Deep dive generated: ${new Date().toLocaleString()}
           <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
             <thead>
               <tr style={{ borderBottom: "1px solid #1e2535" }}>
-                {["Company", "Sector", "Type", "Tier", "Deal Potential", "Financial Health", "Primary Opportunity", "Ticket", "Action"].map(h => (
-                  <th key={h} style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500, whiteSpace: "nowrap" }}>{h}</th>
-                ))}
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Company</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Sector</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Type</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Tier</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Deal Potential</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Financial Health</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Primary Opportunity</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Ticket</th>
+                <th style={{ textAlign: "left", padding: "10px 12px", fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#6b7280", letterSpacing: "1px", textTransform: "uppercase", fontWeight: 500 }}>Action</th>
               </tr>
             </thead>
             <tbody>
@@ -863,7 +863,6 @@ Deep dive generated: ${new Date().toLocaleString()}
     </div>
   );
 }
-
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 3: SECTOR INTELLIGENCE
 // ════════════════════════════════════════════════════════════════════════════
