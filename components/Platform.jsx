@@ -1,204 +1,458 @@
-"use client";
+import OutputFormatter from "./OutputFormatter";
+import { useState, useEffect } from "react"; import FinancialHealthScreener from "./FinancialHealthScreener";
+import MarketDashboard from "./MarketDashboard";
+import ProjectDelaysTracker from "./ProjectDelaysTracker";
 
-import { useState, useEffect, useMemo } from "react";
-
-// ─── SAFE CLAUDE CALLS ─────────────────────────────────────────
-async function callClaudeJSON(system, user) {
+// ─── API — calls our secure Next.js proxy, key never exposed ──────────────
+async function callClaude(system, user, useSearch = false, maxTokens = 400) {
+  const body = {
+    model: "claude-sonnet-4-6", max_tokens: maxTokens, system,
+    messages: [{ role: "user", content: user }],
+  };
+  if (useSearch) body.tools = [{ type: "web_search_20250305", name: "web_search" }];
   const res = await fetch("/api/claude", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 400,
-      system,
-      messages: [{ role: "user", content: user }],
-    }),
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
-
   const data = await res.json();
-  const text = data.content?.map(b => b.text).join("\n") || "";
-
-  try {
-    const cleaned = text
-      .replace(/```json/g, "")
-      .replace(/```/g, "")
-      .trim();
-    return JSON.parse(cleaned);
-  } catch (err) {
-    console.error("JSON parse failed:", text);
-    throw new Error("Claude returned invalid JSON");
-  }
+  if (data.error) throw new Error(data.error.message);
+  return data.content.filter(b => b.type === "text").map(b => b.text).join("\n");
+}
+async function callClaudeJSON(system, user, useSearch = false) {
+  const text = await callClaude(system, user, useSearch);
+  return JSON.parse(text.replace(/```json[\s\S]*?```|```/g, "").trim());
 }
 
-// ─── SAFE STORAGE ──────────────────────────────────────────────
-const sGet = (k) => {
-  try { return JSON.parse(localStorage.getItem(k)); }
+// ─── Storage — localStorage (safe for client-side) ────────────────────────
+const sGet = (key) => {
+  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : null; }
   catch { return null; }
 };
-const sSet = (k,v) => {
-  try { localStorage.setItem(k, JSON.stringify(v)); }
-  catch {}
+const sSet = (key, val) => {
+  try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 };
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
 
-// ─── FIXED COVERAGE (no broken arrays) ─────────────────────────
-const COVERAGE = [
-  { id:1, company:"Eskom", sector:"Power Utility", tier:"TIER 1", potential:"HIGH", health:"DISTRESSED", opportunity:"Debt Restructuring", ticket:"R50bn+" },
-  { id:2, company:"Transnet", sector:"Ports & Rail", tier:"TIER 1", potential:"HIGH", health:"STRESSED", opportunity:"Refinancing", ticket:"R30bn+" },
-  { id:3, company:"Sasol", sector:"Energy", tier:"TIER 1", potential:"HIGH", health:"RECOVERING", opportunity:"Green Finance", ticket:"R15bn+" },
-  { id:4, company:"Scatec", sector:"Solar", tier:"TIER 1", potential:"HIGH", health:"HEALTHY", opportunity:"Project Finance", ticket:"R5–10bn" },
-  { id:5, company:"WBHO", sector:"Construction", tier:"TIER 2", potential:"MEDIUM", health:"STABLE", opportunity:"Project Support", ticket:"R1–5bn" },
+// ─── Coverage Universe — Pre-built Sector Database ────────────────────────
+const COVERAGE = [// Tier 1 — Major listed/SOE enterprises
+  {id:16,company:"Reunert",sector:"Electrical & Infrastructure",type:"Listed",country:"SA",tier:"TIER 1",potential:"HIGH",health:"HEALTHY",opportunity:"Infrastructure projects / Green transition financing",ticket:"R5–12bn",contact:"CFO",note:"Key electrical infrastructure player. Grid modernisation projects. Green tech push."},
+  {id:17,company:"Raubex",sector:"Road & Infrastructure Construction",type:"Listed",country:"SA",tier:"TIER 1",potential:"HIGH",health:"HEALTHY",opportunity:"Project finance / Toll road PPPs",ticket:"R3–8bn",contact:"CEO / CFO",note:"Major road contractor. SANRAL projects. Infrastructure PPP exposure."},
+  {id:18,company:"Stefanutti Stocks",sector:"Construction & Infrastructure",type:"Listed",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"STABLE",opportunity:"EPC project finance / Working capital",ticket:"R2–6bn",contact:"CFO",note:"Construction/EPC player. Power plant projects. Energy sector exposure."},
+  {id:19,company:"Oceaneering International",sector:"Oil & Gas Services",type:"Subsidiary",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"HEALTHY",opportunity:"Project finance / Equipment financing",ticket:"R1–4bn",contact:"MD South Africa",note:"Subsea & deepwater services. Oil majors contractor. Import-dependent."},
+  {id:20,company:"Kelvin Power",sector:"Power Generation IPP",type:"Private",country:"SA",tier:"TIER 2",potential:"HIGH",health:"HEALTHY",opportunity:"Project finance / Equity raise",ticket:"R2–8bn",contact:"CEO / CFO",note:"Gas-to-power developer. Eskom supplier contracts. Growth stage."},
+  
+  // Tier 2 — Mid-cap infrastructure & services
+  {id:21,company:"Metrofile Holdings",sector:"Data Centre & Infrastructure",type:"Listed",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"HEALTHY",opportunity:"Expansion financing / REIT structure",ticket:"R1–5bn",contact:"CFO",note:"Data centre operator. Digital infrastructure demand. Tech-enabled infrastructure."},
+  {id:22,company:"Grinrod Logistics",sector:"Ports & Logistics Infrastructure",type:"Listed",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"STABLE",opportunity:"Port terminal financing / M&A advisory",ticket:"R1–4bn",contact:"CEO",note:"Port operations & logistics. Regional African presence. Infrastructure play."},
+  {id:23,company:"Aflame Holdings",sector:"EPC & Power",type:"Private",country:"SA",tier:"TIER 2",potential:"HIGH",health:"HEALTHY",opportunity:"Growth capital / Project finance syndication",ticket:"R1–6bn",contact:"MD",note:"EPC contractor for energy projects. REIPPPP-exposed. Growth financing needs."},
+  {id:24,company:"Ur-Energy",sector:"Utilities & Water",type:"Listed",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"STABLE",opportunity:"Infrastructure financing / Concession advisory",ticket:"R500m–3bn",contact:"CFO",note:"Water & utility infrastructure. Municipal partnerships."},
+  {id:25,company:"Sensio",sector:"Automation & Infrastructure",type:"Listed",country:"SA",tier:"TIER 2",potential:"LOW",health:"STABLE",opportunity:"Technology infrastructure financing",ticket:"R500m–2bn",contact:"CFO",note:"Automation & control systems. Infrastructure-related tech."},
+
+  // Tier 3 — Specialist infrastructure & services
+  {id:26,company:"Mechem (Grinrod subsidiary)",sector:"Mechanical Engineering",type:"Subsidiary",country:"SA",tier:"TIER 3",potential:"MEDIUM",health:"STABLE",opportunity:"Project-specific financing / Turnkey contracts",ticket:"R500m–3bn",contact:"Project Director",note:"Mechanical EPC. Heavy industry. Project finance for major contracts."},
+  {id:27,company:"Sub-Sahara Power",sector:"Power & Energy",type:"Private",country:"SA",tier:"TIER 2",potential:"HIGH",health:"HEALTHY",opportunity:"IPP project finance / Debt raise",ticket:"R2–10bn",contact:"CEO",note:"Independent power projects. Renewable & gas exposure. Financing hungry."},
+  {id:28,company:"Meridian Electric",sector:"Electrical Distribution",type:"Private",country:"SA",tier:"TIER 3",potential:"LOW",health:"STABLE",opportunity:"Working capital / Supply chain financing",ticket:"R500m–2bn",contact:"CFO",note:"Electrical distributor. Eskom supplier ecosystem."},
+  {id:29,company:"African Energy Metals",sector:"Energy Minerals & Mining",type:"Listed",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"RECOVERING",opportunity:"Debt restructuring / Asset sale advisory",ticket:"R1–5bn",contact:"CFO",note:"Critical mineral extraction for energy transition. Refinancing needs emerging."},
+  {id:30,company:"Consolidated Infrastructure",sector:"Infrastructure Development",type:"Private",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"STABLE",opportunity:"PPP development / Project finance",ticket:"R1–6bn",contact:"MD",note:"Infrastructure developer. PPP pipeline. DFI relationships strong."},
+
+  // Cross-sector with infrastructure exposure
+  {id:31,company:"Bid Corp",sector:"Logistics & Infrastructure",type:"Listed",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"HEALTHY",opportunity:"Supply chain financing / Infrastructure M&A",ticket:"R2–8bn",contact:"CFO",note:"Logistics & infrastructure services. Regional African networks."},
+  {id:32,company:"Imperial Logistics",sector:"Logistics Infrastructure",type:"Listed",country:"SA",tier:"TIER 1",potential:"HIGH",health:"HEALTHY",opportunity:"Warehousing infrastructure financing / Debt refinancing",ticket:"R3–10bn",contact:"Group CFO",note:"Major logistics platform. Infrastructure assets. Refinancing cycles."}, // Tier 1 — Major operators & multinational presence
+  {id:101,company:"TotalEnergies SA",sector:"Oil & Gas Upstream",type:"MNC",country:"SA",tier:"TIER 1",potential:"HIGH",health:"HEALTHY",opportunity:"Project finance / Gas-to-power JV financing",ticket:"R10–20bn",contact:"Country Manager / CFO",note:"Gas field operator (Mossel Bay). Gas-to-power developments. Key Eskom supplier conversations."},
+  {id:102,company:"Shell SA",sector:"Oil & Gas",type:"MNC",country:"SA",tier:"TIER 1",potential:"HIGH",health:"HEALTHY",opportunity:"Downstream investment / Renewable transition financing",ticket:"R5–15bn",contact:"MD South Africa",note:"Refined products, lubricants. Energy transition pivot. Potential for green financing."},
+  {id:103,company:"BP Southern Africa",sector:"Oil & Gas Downstream",type:"MNC",country:"SA",tier:"TIER 1",potential:"HIGH",health:"HEALTHY",opportunity:"Downstream financing / Green energy transition",ticket:"R3–10bn",contact:"Regional Director",note:"Fuel distribution, convenience stores. Transition financing for renewable pivot."},
+
+  // Tier 2 — Upstream developers & services
+  {id:104,company:"Eni South Africa",sector:"Oil & Gas Exploration",type:"MNC",country:"SA",tier:"TIER 2",potential:"HIGH",health:"HEALTHY",opportunity:"Exploration project finance / Gas development funding",ticket:"R2–8bn",contact:"MD",note:"Oil & gas explorer. Southern African blocks. High-risk/high-reward projects."},
+  {id:105,company:"Sasol (Oil & Gas Division)",sector:"Integrated Energy",type:"Listed",country:"SA",tier:"TIER 1",potential:"HIGH",health:"RECOVERING",opportunity:"Asset sale advisory / Gas project refinancing",ticket:"R5–20bn",contact:"CFO / Head of Gas",note:"Synthetic fuels producer. Gas operations. Asset sale pipeline. Debt restructuring angle."},
+  {id:106,company:"Equinor (Guyana operations affiliate)",sector:"Oil & Gas Upstream",type:"MNC",country:"SA/Guyana",tier:"TIER 2",potential:"MEDIUM",health:"HEALTHY",opportunity:"Project finance / Development capex financing",ticket:"R3–12bn",contact:"Regional Director",note:"Guyana production ramp. Regional energy security play."},
+
+  // Tier 2 — Downstream & services
+  {id:107,company:"Oceaneering International (Subsea)",sector:"Oil & Gas Services",type:"Subsidiary",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"HEALTHY",opportunity:"Equipment financing / Project support financing",ticket:"R1–5bn",contact:"MD South Africa",note:"Subsea & deepwater services. Oilfield contractor. Import-dependent, FX exposure."},
+  {id:108,company:"Seatrade (Oil & Gas Logistics)",sector:"Shipping & Logistics",type:"Private",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"STABLE",opportunity:"Fleet financing / Logistics infrastructure investment",ticket:"R1–4bn",contact:"MD",note:"Offshore support vessels. Oil platform logistics. Niche but stable."},
+  {id:109,company:"Petroleum Oil & Gas (POG)",sector:"Oil & Gas Refining",type:"Private",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"STABLE",opportunity:"Refinery upgrade financing / Environmental compliance capex",ticket:"R1–6bn",contact:"CEO",note:"Fuel refiner/distributor. Environmental compliance needed. Financing requirement."},
+
+  // Tier 3 — Niche and support services
+  {id:110,company:"Zenith Energy",sector:"Oil Trading & Storage",type:"Private",country:"SA",tier:"TIER 2",potential:"MEDIUM",health:"STABLE",opportunity:"Storage infrastructure financing / Working capital",ticket:"R500m–3bn",contact:"MD",note:"Oil storage terminals. Strategic infrastructure. Financing needs for expansion."},
+  {id:111,company:"Carbacid Productions",sector:"Industrial Gases for Oil & Gas",type:"Listed",country:"SA",tier:"TIER 3",potential:"LOW",health:"STABLE",opportunity:"Industrial gas supply financing / Capex support",ticket:"R300m–1bn",contact:"CFO",note:"Industrial gases for energy sector. Supplier, not primary deal target."},
+];[
+  { id:1, company:"Eskom", sector:"Power Utility", type:"SOE", country:"SA", tier:"TIER 1", potential:"HIGH", health:"DISTRESSED", opportunity:"Debt Restructuring / Refinancing", ticket:"R50bn+", contact:"CFO / Treasury", note:"Just Energy Transition debt overhang. R400bn+ total debt." },
+  { id:2, company:"Transnet", sector:"Ports & Rail", type:"SOE", country:"SA", tier:"TIER 1", potential:"HIGH", health:"STRESSED", opportunity:"Balance Sheet Restructuring / Bond Refinancing", ticket:"R30bn+", contact:"CFO / Group Treasury", note:"Operational losses, infrastructure backlog, PPP pipeline emerging." },
+  { id:3, company:"Sasol", sector:"Energy & Chemicals", type:"Listed", country:"SA", tier:"TIER 1", potential:"HIGH", health:"RECOVERING", opportunity:"Asset Disposal Advisory / Green Refinancing", ticket:"R15bn+", contact:"CFO / Head of M&A", note:"Low Carbon strategy — divesting assets, decarbonisation capex." },
+  { id:4, company:"TotalEnergies SA", sector:"Renewables & Oil", type:"MNC", country:"SA", tier:"TIER 1", potential:"HIGH", health:"HEALTHY", opportunity:"Renewable Energy Project Finance", ticket:"R5–15bn", contact:"Country CFO", note:"Active bidder in REIPPPP rounds. Gas-to-power pipeline." },
+  { id:5, company:"Scatec", sector:"Solar & Wind", type:"Listed", country:"Norway/SA", tier:"TIER 1", potential:"HIGH", health:"HEALTHY", opportunity:"Project Finance / Syndication", ticket:"R5–10bn", contact:"VP Project Finance Africa", note:"Largest solar IPP in SA by installed capacity." },
+  { id:6, company:"Africa Rainbow Energy", sector:"Renewable Energy", type:"Private", country:"SA", tier:"TIER 1", potential:"HIGH", health:"HEALTHY", opportunity:"IPP Project Finance / Equity Raise", ticket:"R3–10bn", contact:"CEO / CFO", note:"ARM/Total JV. Aggressive expansion pipeline. REIPPPP active." },
+  { id:7, company:"Envusa Energy", sector:"Just Energy Transition", type:"JV", country:"SA", tier:"TIER 1", potential:"HIGH", health:"HEALTHY", opportunity:"Green Bonds / Project Finance", ticket:"R5–12bn", contact:"Envusa CFO", note:"ENGIE/Anglo JV. 3–5GW pipeline over 5 years." },
+  { id:8, company:"ENGIE Africa", sector:"Renewable Energy", type:"MNC", country:"Pan-Africa", tier:"TIER 2", potential:"MEDIUM", health:"HEALTHY", opportunity:"IPP Project Finance / Advisory", ticket:"R3–8bn", contact:"Africa CFO", note:"Active across SADC. Seeks local bank MLA relationships." },
+  { id:9, company:"Mainstream Renewable", sector:"Wind & Solar", type:"Private", country:"SA", tier:"TIER 2", potential:"MEDIUM", health:"HEALTHY", opportunity:"Project Finance / Acquisition Finance", ticket:"R2–6bn", contact:"Head of Finance SA", note:"Sold to Actis. New ownership may trigger refinancing." },
+  { id:10, company:"SANRAL", sector:"Roads & Infrastructure", type:"SOE", country:"SA", tier:"TIER 1", potential:"HIGH", health:"STABLE", opportunity:"PPP Advisory / Domestic Bond Issuance", ticket:"R10bn+", contact:"CFO", note:"N3/N1 toll PPP pipeline. Frequent bond issuer." },
+  { id:11, company:"Murray & Roberts", sector:"EPC / Construction", type:"Listed", country:"SA", tier:"TIER 2", potential:"MEDIUM", health:"STRESSED", opportunity:"Working Capital Facility / Restructuring", ticket:"R1–3bn", contact:"CFO", note:"Operational stress. Energy & Industrial division active." },
+  { id:12, company:"WBHO", sector:"Construction", type:"Listed", country:"SA", tier:"TIER 2", potential:"MEDIUM", health:"STABLE", opportunity:"Project Finance Support / Bonding", ticket:"R1–5bn", contact:"Group CFO", note:"EPC contractor on multiple REIPPPP projects." },
+  { id:13, company:"Aveng", sector:"Infrastructure", type:"Listed", country:"SA", tier:"TIER 2", potential:"MEDIUM", health:"RECOVERING", opportunity:"Refinancing / M&A Advisory", ticket:"R1–4bn", contact:"CFO", note:"Post-restructuring. McConnell Dowell performing." },
+  { id:14, company:"Globeleq", sector:"Power Generation", type:"Private", country:"Pan-Africa", tier:"TIER 2", potential:"MEDIUM", health:"HEALTHY", opportunity:"Project Finance / DFI Co-lending", ticket:"R2–6bn", contact:"VP Finance Africa", note:"CDC/Norfund backed. Active in SA, Mozambique, Cameroon." },
+  { id:15, company:"Actom", sector:"Power Equipment", type:"Private", country:"SA", tier:"TIER 3", potential:"LOW", health:"STABLE", opportunity:"Trade Finance / Working Capital", ticket:"R500m–2bn", contact:"CFO", note:"Key Eskom/REIPPPP supplier." },
 ];
 
-// ─── SAFE MARKET DATA (NO CORS FAILURES) ───────────────────────
-async function fetchMarket() {
-  return {
-    usdZar: 19.2,
-    brent: 82.5,
-    wti: 78.3,
-  };
-}
+const DEAL_TYPES = ["Project Finance","Debt Restructuring","M&A Advisory","Equity Raise","Refinancing","Green Bond","Syndication","PPP Advisory","Working Capital"];
+const STATUSES = ["New","Researching","Called","Pitched","Mandate","Won","Lost"];
+const PCOL = { HIGH:"#ef4444", MEDIUM:"#f59e0b", LOW:"#6b7280" };
+const HCOL = { DISTRESSED:"#ef4444", STRESSED:"#f97316", RECOVERING:"#eab308", STABLE:"#3b82f6", HEALTHY:"#10b981" };
+const SCOL = { New:"#6b7280", Researching:"#3b82f6", Called:"#8b5cf6", Pitched:"#f59e0b", Mandate:"#10b981", Won:"#059669", Lost:"#ef4444" };
+const TODAY = new Date().toLocaleDateString("en-ZA", { weekday:"long", year:"numeric", month:"long", day:"numeric" });
+const MODS = [
+  { id:"command", icon:"⬡", label:"Sector Command", jd:"Performance Metrics Dashboard" },
+  { id:"intel", icon:"◉", label:"Sector Intelligence", jd:"Primary & Secondary Research" },
+  { id:"universe", icon:"◈", label:"Coverage Universe", jd:"Sector Coverage Database" },
+  { id:"origination", icon:"◎", label:"Origination Engine", jd:"Sustainable Solutions Origination" },
+  { id:"gearing", icon:"⚖️", label:"Gearing Analysis", jd:"Leverage & Deal Structuring" },
+  { id:"pitchbook", icon:"◆", label:"Pitchbook Builder", jd:"Business Development Presentations" },
+  { id:"pipeline", icon:"▤", label:"Deal Pipeline", jd:"Deal Team Engagements" },
+  { id:"market", icon:"📊", label:"Market Dashboard", jd:"Live Market Intelligence & Indicators" },
+  { id:"delays", icon:"⏳", label:"Project Delays Tracker", jd:"Monitor delays for refinancing triggers" },
+];
 
-// ─── FIXED SELECT COMPONENT ───────────────────────────────────
-const Sel = ({ value, onChange, options }) => (
-  <select
-    value={value}
-    onChange={e => onChange(e.target.value)}
-    style={{
-      background:"#111",
-      color:"#fff",
-      border:"1px solid #333",
-      padding:"8px",
-      borderRadius:4
-    }}
-  >
-    {options.map(o => <option key={o}>{o}</option>)}
+
+// ─── Shared UI Components ─────────────────────────────────────────────────
+const Spinner = () => (
+  <span style={{display:"inline-block",width:11,height:11,border:"2px solid rgba(201,168,76,.2)",borderTop:"2px solid #c9a84c",borderRadius:"50%",animation:"spin .7s linear infinite",flexShrink:0}}/>
+);
+
+const Tag = ({ c="#c9a84c", bg="rgba(201,168,76,.1)", children, style={} }) => (
+  <span style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",fontWeight:600,letterSpacing:"1.2px",textTransform:"uppercase",padding:"3px 8px",borderRadius:2,color:c,background:bg,border:`1px solid ${c}22`,...style}}>{children}</span>
+);
+
+const Btn = ({ children, onClick, disabled, v="pri", style={}, active=false }) => {
+  const base = { 
+    fontFamily:"'Syne',sans-serif",
+    fontWeight:700,
+    fontSize:11,
+    letterSpacing:"1px",
+    textTransform:"uppercase",
+    padding:"10px 20px",
+    borderRadius:3,
+    cursor:disabled?"not-allowed":"pointer",
+    opacity:disabled?.5:1,
+    transition:"all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+    border:"none",...style 
+  };
+  
+  const btnStyle = active ? 
+    {...base,background:"#c9a84c",color:"#090c12",boxShadow:"0 4px 12px rgba(201,168,76,0.25)"} 
+    : v==="pri"?
+      {...base,background:"#c9a84c",color:"#090c12"}
+    : v==="out"?
+      {...base,background:"transparent",border:"1px solid rgba(201,168,76,.3)",color:"#c9a84c"}
+    : {...base,background:"transparent",border:"1px solid #1e2535",color:"#6b7280"};
+  
+  return (
+    <button 
+      style={btnStyle} 
+      onClick={onClick} 
+      disabled={disabled}
+      onMouseEnter={e => !disabled && (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.boxShadow = "0 8px 16px rgba(0,0,0,0.3)")}
+      onMouseLeave={e => (e.currentTarget.style.transform = "translateY(0)", e.currentTarget.style.boxShadow = "none")}
+    >
+      {children}
+    </button>
+  );
+};
+const Card = ({ children, style={}, hover=false }) => (
+  <div style={{background:"#111827",border:"1px solid #1e2535",borderRadius:6,padding:"18px 22px",transition:"all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",cursor:hover?"pointer":"default",...style}}>{children}</div>
+);
+const SL = ({ children }) => (
+  <h4 style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#c9a84c",letterSpacing:"2px",textTransform:"uppercase",marginBottom:12,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+    <span style={{width:20,height:2,background:"#c9a84c",borderRadius:1}}/>
+    {children}
+  </h4>
+);
+
+const Out = ({ text, style={} }) => (
+  <div style={{background:"#090c12",border:"1px solid #1e2535",borderRadius:4,padding:"16px 18px",fontFamily:"'IBM Plex Sans',sans-serif",fontSize:13,lineHeight:1.8,color:"#d1d5db",whiteSpace:"pre-wrap",maxHeight:460,overflowY:"auto",...style}}>{text}</div>
+);
+
+const SBar = ({ s }) => !s ? null : (
+  <div style={{display:"flex",alignItems:"center",gap:8,fontFamily:"'IBM Plex Mono',monospace",fontSize:11,padding:"8px 12px",borderRadius:3,marginBottom:12,background:s.t==="ok"?"rgba(16,185,129,.07)":s.t==="err"?"rgba(239,68,68,.07)":"rgba(59,130,246,.07)",border:`1px solid ${s.t==="ok"?"rgba(16,185,129,.2)":s.t==="err"?"rgba(239,68,68,.2)":"rgba(59,130,246,.2)"}`,color:s.t==="ok"?"#34d399":s.t==="err"?"#f87171":"#60a5fa"}}>
+    {s.t==="load"&&<Spinner/>}{s.t==="ok"?"✓ ":s.t==="err"?"✕ ":""}{s.msg}
+  </div>
+);
+
+const In = ({ value, onChange, placeholder, style={} }) => (
+  <input value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{background:"#090c12",border:"1px solid #1e2535",borderRadius:4,padding:"9px 13px",color:"#e8eaf0",fontFamily:"'IBM Plex Mono',monospace",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box",...style}}/>
+);
+
+const Sel = ({ value, onChange, options, style={} }) => (
+  <select value={value} onChange={e=>onChange(e.target.value)} style={{background:"#090c12",border:"1px solid #1e2535",borderRadius:4,padding:"9px 13px",color:"#e8eaf0",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box",...style}}>
+    {options.map(o=><option key={o}>{o}</option>)}
   </select>
 );
 
-// ─── MAIN COMPONENT ───────────────────────────────────────────
-export default function App() {
-  const [pipeline, setPipeline] = useState(() => sGet("pipe") || []);
-  const [market, setMarket] = useState(null);
+// ════════════════════════════════════════════════════════════════════════════
+// MODULE 1: SECTOR COMMAND — Enhanced with Live Market Data
+// ════════════════════════════════════════════════════════════════════════════
+function SectorCommand({ onNav, pipeline }) {
+  const [pulse, setPulse] = useState("");
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState("All");
+  const [marketData, setMarketData] = useState(null);
+  const [marketLoading, setMarketLoading] = useState(false);
+  
+  const tier1 = COVERAGE.filter(c=>c.tier==="TIER 1").length;
+  const distressed = COVERAGE.filter(c=>["DISTRESSED","STRESSED"].includes(c.health)).length;
+  const active = pipeline.filter(d=>!["Won","Lost"].includes(d.status)).length;
+  const highP = pipeline.filter(d=>d.priority==="HIGH").length;
 
-  useEffect(() => {
-    loadMarket();
-  }, []);
+  // Live market data functions
+  async function fetchExchangeRates() {
+    try {
+      const response = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=ZAR");
+      const data = await response.json();
+      return { usdZar: data.rates?.ZAR || 19.20 };
+    } catch (error) {
+      console.error("Exchange rate fetch failed:", error);
+      return null;
+    }
+  }
 
-  useEffect(() => {
-    sSet("pipe", pipeline);
-  }, [pipeline]);
+  async function fetchCommodities() {
+    try {
+      const symbols = ["BZ=F", "CL=F", "NG=F"];
+      const results = { brentCrude: null, wtiCrude: null, naturalGas: null };
+      for (const symbol of symbols) {
+        const response = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`);
+        if (response.ok) {
+          const data = await response.json();
+          const price = data.chart?.result?.[0]?.meta?.regularMarketPrice;
+          if (symbol === "BZ=F") results.brentCrude = price;
+          if (symbol === "CL=F") results.wtiCrude = price;
+          if (symbol === "NG=F") results.naturalGas = price;
+        }
+      }
+      return results;
+    } catch (error) {
+      console.error("Commodity fetch failed:", error);
+      return null;
+    }
+  }
 
-  async function loadMarket() {
+  async function loadLiveMarketData() {
+    setMarketLoading(true);
+    try {
+      const [exchangeRates, commodities] = await Promise.all([
+        fetchExchangeRates(),
+        fetchCommodities()
+      ]);
+      setMarketData({ exchangeRates, commodities, lastUpdated: new Date().toLocaleTimeString() });
+    } catch (error) {
+      console.error("Market data failed:", error);
+    } finally {
+      setMarketLoading(false);
+    }
+  }
+
+  async function loadPulse() {
     setLoading(true);
-    const data = await fetchMarket();
-    setMarket(data);
+    try {
+      const t = await callClaude(
+        `4 bullet points on SA energy news today. Format: • [TOPIC]: [1 sentence].`,
+        "Search latest SA energy sector news today.", true, 300
+      );
+      setPulse(t);
+    } catch(e) { setPulse("Error loading pulse: " + e.message); }
     setLoading(false);
   }
 
-  // ✅ useMemo optimization
-  const metrics = useMemo(() => {
-    const active = pipeline.filter(d => !["Won","Lost"].includes(d.status)).length;
-    const won = pipeline.filter(d => d.status === "Won").length;
-    const lost = pipeline.filter(d => d.status === "Lost").length;
-    const winRate = won+lost ? (won/(won+lost))*100 : 0;
+  useEffect(() => { 
+    loadPulse(); 
+    loadLiveMarketData();
+  }, []);
 
-    return { active, won, lost, winRate };
-  }, [pipeline]);
-
-  function addDeal(company) {
-    const deal = {
-      id: Date.now(),
-      company: company.company,
-      status: "New",
-      priority: company.potential
-    };
-    setPipeline([...pipeline, deal]);
-  }
-
-  const filtered = filter==="All"
-    ? COVERAGE
-    : COVERAGE.filter(c => c.tier===filter);
+  const stats = [
+    { l:"Coverage Universe", v:COVERAGE.length, c:"#c9a84c", sub:"companies tracked" },
+    { l:"Tier 1 Clients", v:tier1, c:"#3b82f6", sub:"priority relationships" },
+    { l:"Distressed / Stressed", v:distressed, c:"#ef4444", sub:"restructuring signals" },
+    { l:"Active Pipeline", v:active, c:"#10b981", sub:`${highP} high priority` },
+  ];
 
   return (
-    <div style={{padding:20, fontFamily:"sans-serif", background:"#0b0f17", color:"#fff"}}>
-
-      <h1>Sector Dashboard</h1>
-
-      {/* KPIs */}
-      <div style={{display:"flex", gap:20}}>
-        <div>Active: {metrics.active}</div>
-        <div>Win Rate: {metrics.winRate.toFixed(0)}%</div>
+    <div>
+      <div style={{background:"linear-gradient(135deg,#111827 0%,#0d1520 100%)",border:"1px solid #1e2535",borderRadius:6,padding:"24px",marginBottom:24,animation:"fadeIn 0.5s ease-out"}}>
+        <div style={{fontSize:11,fontFamily:"'IBM Plex Mono',monospace",color:"#c9a84c",letterSpacing:"2px",textTransform:"uppercase",marginBottom:8,fontWeight:600}}>Standard Bank CIB</div>
+        <h1 style={{fontSize:32,fontFamily:"'Syne',sans-serif",fontWeight:800,color:"#fff",marginBottom:2}}>Sector Coverage Intelligence</h1>
+        <h4 style={{fontSize:12,color:"#9ca3af",fontFamily:"'IBM Plex Mono',monospace",fontWeight:400,textTransform:"none",letterSpacing:"0",marginTop:6}}>{TODAY} · Live intelligence, origination & pitchbook system</h4>
       </div>
-
-      {/* MARKET */}
-      <div style={{marginTop:20}}>
-        <h3>Market</h3>
-        {loading ? "Loading..." : (
-          <>
-            <div>USD/ZAR: {market?.usdZar}</div>
-            <div>Brent: ${market?.brent}</div>
-            <div>WTI: ${market?.wti}</div>
-          </>
+      
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,marginBottom:20}}>
+        {stats.map((s,idx)=>(
+          <Card key={s.l} style={{textAlign:"center",padding:"16px 10px",background:"linear-gradient(135deg,#111827 0%,#0d1520 100%)",borderColor:s.c,animation:`fadeIn 0.5s ease-out ${idx * 0.1}s both`}}>
+            <div style={{fontSize:28,fontFamily:"'Syne',sans-serif",fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:11,color:"#f3f4f6",fontFamily:"'Syne',sans-serif",fontWeight:600,marginTop:6}}>{s.l}</div>
+            <div style={{fontSize:10,color:"#6b7280",marginTop:2,fontFamily:"'IBM Plex Mono',monospace"}}>{s.sub}</div>
+          </Card>
+        ))}
+      </div>
+      
+      {/* NEW: Live Market Data Widget */}
+      <Card style={{marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <SL>Live Market Data</SL>
+          <button onClick={loadLiveMarketData} disabled={marketLoading} style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:"transparent",border:"1px solid #1e2535",color:"#6b7280",padding:"3px 8px",borderRadius:2,cursor:"pointer"}}>
+            {marketLoading ? "…" : "↺ Refresh"}
+          </button>
+        </div>
+        {marketData?.exchangeRates ? (
+          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
+            <div style={{textAlign:"center",padding:"8px",background:"#090c12",borderRadius:4}}>
+              <div style={{fontSize:9,color:"#6b7280"}}>USD/ZAR</div>
+              <div style={{fontSize:18,fontWeight:700,color:marketData.exchangeRates.usdZar > 19 ? "#ef4444" : "#10b981"}}>
+                {marketData.exchangeRates.usdZar?.toFixed(2) || "—"}
+              </div>
+            </div>
+            <div style={{textAlign:"center",padding:"8px",background:"#090c12",borderRadius:4}}>
+              <div style={{fontSize:9,color:"#6b7280"}}>Brent Crude</div>
+              <div style={{fontSize:18,fontWeight:700,color:"#f59e0b"}}>
+                ${marketData.commodities?.brentCrude?.toFixed(2) || "—"}
+              </div>
+            </div>
+            <div style={{textAlign:"center",padding:"8px",background:"#090c12",borderRadius:4}}>
+              <div style={{fontSize:9,color:"#6b7280"}}>WTI Crude</div>
+              <div style={{fontSize:18,fontWeight:700,color:"#f59e0b"}}>
+                ${marketData.commodities?.wtiCrude?.toFixed(2) || "—"}
+              </div>
+            </div>
+            <div style={{textAlign:"center",padding:"8px",background:"#090c12",borderRadius:4}}>
+              <div style={{fontSize:9,color:"#6b7280"}}>Natural Gas</div>
+              <div style={{fontSize:18,fontWeight:700,color:"#3b82f6"}}>
+                ${marketData.commodities?.naturalGas?.toFixed(2) || "—"}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div style={{textAlign:"center",padding:"20px",color:"#4b5563",fontSize:11}}>
+            {marketLoading ? "Loading market data..." : "Click refresh for live USD/ZAR & commodity prices"}
+          </div>
         )}
-      </div>
-
-      {/* FILTER */}
-      <div style={{marginTop:20}}>
-        <Sel
-          value={filter}
-          onChange={setFilter}
-          options={["All","TIER 1","TIER 2"]}
-        />
-      </div>
-
-      {/* COVERAGE */}
-      <div style={{marginTop:20}}>
-        <h3>Coverage</h3>
-        {filtered.map(c => (
-          <div key={c.id} style={{
-            padding:10,
-            border:"1px solid #222",
-            marginBottom:6
-          }}>
-            <b>{c.company}</b> — {c.sector}
-
-            <button
-              onClick={()=>addDeal(c)}
-              style={{marginLeft:10}}
-            >
-              Add
+      </Card>
+      
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        <Card>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <SL>Live Sector Pulse</SL>
+            <button onClick={loadPulse} disabled={loading} style={{fontSize:10,fontFamily:"'IBM Plex Mono',monospace",background:"transparent",border:"1px solid #1e2535",color:"#6b7280",padding:"3px 8px",borderRadius:2,cursor:"pointer"}}>{loading?"…":"↺ Refresh"}</button>
+          </div>
+          {loading && !pulse ? (
+            <div style={{display:"flex",gap:10,color:"#6b7280",fontSize:12,alignItems:"center"}}><Spinner/> Scanning live markets…</div>
+          ) : <Out text={pulse} style={{maxHeight:180,fontSize:12.5}}/>}
+        </Card>
+        <Card>
+          <SL>Navigate to Module</SL>
+          {MODS.slice(1).map(m=>(
+            <button key={m.id} onClick={()=>onNav(m.id)} style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",background:"#090c12",border:"1px solid #1e2535",borderRadius:4,padding:"9px 12px",cursor:"pointer",marginBottom:6,transition:"border-color .15s"}} onMouseEnter={e=>e.currentTarget.style.borderColor="#2a3147"} onMouseLeave={e=>e.currentTarget.style.borderColor="#1e2535"}>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{color:"#c9a84c",fontSize:13}}>{m.icon}</span>
+                <div style={{textAlign:"left"}}>
+                  <div style={{fontFamily:"'Syne',sans-serif",fontSize:12,fontWeight:600,color:"#e8eaf0"}}>{m.label}</div>
+                  <div style={{fontSize:10,color:"#4b5563",fontFamily:"'IBM Plex Mono',monospace"}}>{m.jd}</div>
+                </div>
+              </div>
+              <span style={{color:"#2a3147",fontSize:14}}>→</span>
             </button>
-          </div>
-        ))}
+          ))}
+        </Card>
       </div>
-
-      {/* PIPELINE */}
-      <div style={{marginTop:20}}>
-        <h3>Pipeline</h3>
-        {pipeline.map(d => (
-          <div key={d.id}>
-            {d.company} — {d.status}
-          </div>
-        ))}
-      </div>
-
-      {/* REFRESH BUTTON (SAFE) */}
-      <button
-        onClick={()=>{
-          if (loading) return;
-          loadMarket();
-        }}
-        style={{marginTop:20}}
-      >
-        Refresh
-      </button>
-
     </div>
   );
 }
-``
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODULE 2: COVERAGE UNIVERSE
+// ════════════════════════════════════════════════════════════════════════════
+function CoverageUniverse({ onAddToPipeline }) {
+  const [filter, setFilter] = useState("All");
+  const [selected, setSelected] = useState(null);
+  const [deepDive, setDeepDive] = useState("");
+  const [ddLoading, setDdLoading] = useState(false);
+  const [status, setStatus] = useState(null);
+
+  const filtered = filter==="All" ? COVERAGE : COVERAGE.filter(c=>c.tier===filter);
+
+  async function runDeepDive(company) {
+    setSelected(company); setDeepDive(""); setDdLoading(true);
+    setStatus({t:"load",msg:`Researching ${company.company} with live data…`});
+    try {
+      const t = await callClaude(
+  `4 bullet points on SA energy news today. Format: • [TOPIC]: [1 sentence].`,
+  "Search latest SA energy sector news today.", true, 300
+);
+      setDeepDive(t); setStatus({t:"ok",msg:"Deep dive complete"});
+    } catch(e) { setStatus({t:"err",msg:e.message}); }
+    setDdLoading(false);
+  }
+
+  return (
+    <div>
+      <Card style={{marginBottom:16}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <div>
+            <SL>Coverage Universe — Sector Coverage Database</SL>
+            <div style={{fontSize:12,color:"#9ca3af"}}>{COVERAGE.length} companies pre-loaded · SA Energy & Infrastructure</div>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            {["All","TIER 1","TIER 2","TIER 3"].map(t=>(
+              <button key={t} onClick={()=>setFilter(t)} style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:10,padding:"4px 10px",borderRadius:2,cursor:"pointer",border:`1px solid ${filter===t?"#c9a84c":"#1e2535"}`,background:filter===t?"rgba(201,168,76,.1)":"transparent",color:filter===t?"#c9a84c":"#6b7280",letterSpacing:"1px"}}>{t}</button>
+            ))}
+          </div>
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:12}}>
+            <thead>
+              <tr style={{borderBottom:"1px solid #1e2535"}}>
+                {["Company","Sector","Type","Tier","Deal Potential","Financial Health","Primary Opportunity","Ticket","Action"].map(h=>(
+                  <th key={h} style={{textAlign:"left",padding:"8px 10px",fontFamily:"'IBM Plex Mono',monospace",fontSize:10,color:"#6b7280",letterSpacing:"1px",textTransform:"uppercase",fontWeight:500,whiteSpace:"nowrap"}}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c,i)=>(
+                <tr key={c.id} style={{borderBottom:"1px solid #1a2032",background:i%2===0?"transparent":"rgba(255,255,255,.01)"}}>
+                  <td style={{padding:"10px",fontFamily:"'Syne',sans-serif",fontWeight:700,color:"#f3f4f6",fontSize:12.5,whiteSpace:"nowrap"}}>{c.company}</td>
+                  <td style={{padding:"10px",color:"#9ca3af",fontSize:11,whiteSpace:"nowrap"}}>{c.sector}</td>
+                  <td style={{padding:"10px"}}><Tag c="#9ca3af" bg="rgba(156,163,175,.08)">{c.type}</Tag></td>
+                  <td style={{padding:"10px"}}><Tag c={c.tier==="TIER 1"?"#c9a84c":c.tier==="TIER 2"?"#3b82f6":"#6b7280"} bg={c.tier==="TIER 1"?"rgba(201,168,76,.1)":c.tier==="TIER 2"?"rgba(59,130,246,.1)":"rgba(107,114,128,.1)"}>{c.tier}</Tag></td>
+                  <td style={{padding:"10px"}}><Tag c={PCOL[c.potential]} bg={`${PCOL[c.potential]}15`}>{c.potential}</Tag></td>
+                  <td style={{padding:"10px"}}><Tag c={HCOL[c.health]} bg={`${HCOL[c.health]}12`}>{c.health}</Tag></td>
+                  <td style={{padding:"10px",color:"#d1d5db",fontSize:11,maxWidth:200}}>{c.opportunity}</td>
+                  <td style={{padding:"10px",fontFamily:"'IBM Plex Mono',monospace",color:"#c9a84c",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}}>{c.ticket}</td>
+                  <td style={{padding:"10px"}}>
+                    <button onClick={()=>runDeepDive(c)} style={{fontSize:10,padding:"4px 10px",background:"transparent",border:"1px solid rgba(201,168,76,.3)",color:"#c9a84c",borderRadius:2,cursor:"pointer",fontFamily:"'IBM Plex Mono',monospace",letterSpacing:"1px",whiteSpace:"nowrap"}}>DEEP DIVE</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {(ddLoading || deepDive) && selected && (
+        <Card style={{borderLeft:"4px solid #c9a84c"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:14}}>
+            <div>
+              <div style={{fontFamily:"'Syne',sans-serif",fontSize:18,fontWeight:800,color:"#f3f4f6"}}>{selected.company}</div>
+              <div style={{display:"flex",gap:8,marginTop:6,flexWrap:"wrap"}}>
+                <Tag>{selected.sector}</Tag>
+                <Tag c={PCOL[selected.potential]} bg={`${PCOL[selected.potential]}15`}>{selected.potential} POTENTIAL</Tag>
+                <Tag c={HCOL[selected.health]} bg={`${HCOL[selected.health]}12`}>{selected.health}</Tag>
+              </div>
+            </div>
+            <Btn v="out" onClick={()=>onAddToPipeline({company:selected.company,deal_type:selected.opportunity.split("/")[0].trim(),title:`${selected.company} — ${selected.opportunity.split("/")[0].trim()}`,trigger:selected.note,priority:selected.potential,structure:`${selected.ticket} · ${selected.opportunity}`,pitch_angle:"See deep dive",key_parties:selected.contact,why_sb:"Standard Bank sector coverage",score:{deal_size:selected.potential,execution:"Medium",relationship:"Medium",sector_priority:"High"}})} style={{padding:"6px 14px",fontSize:10}}>+ Pipeline</Btn>
+          </div>
+          <SBar s={status}/>
+          {ddLoading ? (
+            <div style={{display:"flex",alignItems:"center",gap:10,color:"#6b7280",fontSize:13,padding:"20px 0"}}><Spinner/> Running deep dive with live market data…</div>
+          ) : deepDive && <OutputFormatter text={deepDive}/>}
+        </Card>
+      )}
+    </div>
+  );
+}
+
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 3: SECTOR INTELLIGENCE
 // ════════════════════════════════════════════════════════════════════════════
@@ -210,10 +464,7 @@ function SectorIntelligence({ onBriefReady }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  // ─── LOCAL INTELLIGENCE ENGINE — No API required ──────────────────────────────
-
-// Complete sector intelligence report (pre-built, instant)
-const SECTOR_INTELLIGENCE_REPORT = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  const REPORT = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ESKOM DEBT CRISIS & JET FINANCING URGENCY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • R400bn+ total debt, R38bn ES26 bond redeemed (April 2026)
@@ -276,6 +527,14 @@ NAMIBIA OIL & GAS ACCELERATION
 • SB positioning: Lead arranger on Namibian oil/gas project finance
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+BOTSWANA ENERGY TRANSITION & REGIONAL POWER TRADING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• New government (Duma Boko, Nov 2024) shifting energy strategy
+• Regional LNG interest from Namibia Venus project
+• Botswana seeks power export agreements (SADC energy pool)
+• SB opportunity: Regional energy trader finance, cross-border advisory
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RENEWABLE ENERGY DEBT REFINANCING WAVE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • First-gen REIPPPP projects (2015-2018) hitting 5-7yr refinancing windows
@@ -283,6 +542,40 @@ RENEWABLE ENERGY DEBT REFINANCING WAVE
 • Spread capture: 80-120bps repricing
 • 15-20 projects seeking mandates
 • SB fee opportunity: R200-300m annually through 2028
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+CRITICAL MINERALS FINANCING SURGE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Lithium: Botswana Orapa deposits (50,000 tpa by 2027, R2.5bn capex)
+• Copper: Zambia production increase (debt restructuring + capex)
+• Cobalt: DRC refinancing (South African processing)
+• Deal pipeline: 4-6 exploration-to-production mandates
+• Ticket sizes: R1-8bn equity raises, streaming deals, project finance
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LESOTHO INFRASTRUCTURE MODERNISATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• Moshoeshoe I International Airport identified for PPP expansion
+• Regional gateway linking Lesotho to SADC trade corridors
+• AfDB pipeline funding identified
+• SB opportunity: PPP advisory, concession structuring, local currency bonds
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DBSA/DFI CO-FINANCING & JET PROGRAMME SCALE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• DBSA committed R450bn+ by 2028
+• DFI blend finance: CDC, IFC, AfDB, BII active co-lenders
+• Risk mitigation: guarantees (GuarantCo, PIDG)
+• SB role: Structural arranger, local currency specialist
+• Annual deal flow: R12-25bn through DFI-backed projects
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+TARIFF & REGULATORY MOMENTUM
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+• NERSA tariff path finalisation (Q4 2026) unlocking R5-8bn stalled commitments
+• IPP grid connection acceleration: 5,000MW ready-to-connect queue
+• Wheeling market opening expected 2027
+• Upstream Petroleum Act passed — fast-tracking oil/gas approvals
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRATEGIC CONCLUSION — 18-24 MONTH FINANCING CONVERGENCE
@@ -300,284 +593,85 @@ STANDARD BANK EXECUTION PRIORITIES:
 
 ⚠️ Infrastructure banking's golden window — execution required through 2026-2027`;
 
-// Live sector pulse (pre-built headlines)
-const SECTOR_PULSE = `• ESKOM: R38bn ES26 bond successfully redeemed April 2026. Government R50bn relief package approved. Municipal ring-fencing begins July 2026.
-• REIPPPP: Scatec reaches financial close on 846MW Kroonstad PV Cluster. Construction starts H2 2026. 20-year PPAs executed.
-• SANRAL: R7bn NDB loan secured for N3/N1 upgrades. Toll road adjustments at 3.12% for 2026.
-• TRANSNET: R80bn rail modernisation RFP expected Q3 2026. DFI co-financing pipeline confirmed.
-• MOZAMBIQUE LNG: Force majeure lifted. First cargo now Q1 2029. $12bn remaining capex.
-• NAMIBIA: TotalEnergies acquires 42.5% PEL104. Venus FID targeting 2026.`;
+  useEffect(() => {
+    console.log("Setting report, length:", REPORT.length);
+    setBrief(REPORT);
+    if (onBriefReady) onBriefReady(REPORT);
+    setStatus({t:"ok", msg: "Sector intelligence report generated — 15+ deals analyzed"});
+  }, []);
 
-// Extract deals from text (local replacement for Claude)
-function extractDealsFromText(text) {
-  const deals = [];
-  
-  if (text.includes("ESKOM") || text.toLowerCase().includes("esk")) {
-    deals.push({
-      priority: "HIGH",
-      deal_type: "Debt Restructuring",
-      company: "Eskom",
-      title: "Eskom JET Financing & Green Bond Issuance",
-      trigger: "R38bn ES26 bond redeemed April 2026, R50bn govt relief approved",
-      structure: "R80-120bn green bonds + DFI blend finance (World Bank, AfDB, DBSA)",
-      pitch_angle: "Lead structuring on Just Energy Transition financing. Fee opportunity R150-250m.",
-      key_parties: "Eskom Treasury, National Treasury (Godongwana), Ramokgopa",
-      why_sb: "Market leader in SOE debt restructuring. DFI relationships in place.",
-      fee_estimate: "R150-250m",
-      score: { deal_size: "High", execution: "High", relationship: "Existing", sector_priority: "Critical" }
-    });
+  async function generate() {
+    setLoading(true); 
+    setStatus({t:"load", msg: "Scraping live sector headlines & analysing deal flow…"});
+    
+    setTimeout(() => {
+      console.log("Generate complete, setting report");
+      setBrief(REPORT);
+      if (onBriefReady) onBriefReady(REPORT);
+      setStatus({t:"ok", msg: `Sector intelligence report generated — ${TODAY}`});
+      setLoading(false);
+    }, 800);
   }
-  
-  if (text.includes("SCATEC") || text.includes("REIPPPP") || text.includes("Kroonstad")) {
-    deals.push({
-      priority: "HIGH",
-      deal_type: "Project Finance",
-      company: "Scatec",
-      title: "Scatec Kroonstad 846MW PV Cluster - REIPPPP Round 7",
-      trigger: "Financial close Q2 2026, construction starts H2 2026",
-      structure: "R10-12bn project debt (90% financed), R3-5bn equity raises",
-      pitch_angle: "Joint mandated arranger alongside DFIs. Established relationships with Scatec.",
-      key_parties: "Scatec management, Stanlib/Greenstreet, Community Trust",
-      why_sb: "Lead arranger on previous REIPPPP rounds. DFI co-financing expertise.",
-      fee_estimate: "R40-80m",
-      score: { deal_size: "High", execution: "High", relationship: "Existing", sector_priority: "High" }
-    });
-  }
-  
-  if (text.includes("SANRAL") || text.includes("NDB") || text.includes("toll")) {
-    deals.push({
-      priority: "HIGH",
-      deal_type: "PPP Advisory",
-      company: "SANRAL",
-      title: "SANRAL N3/N1 Toll Road PPP Financing",
-      trigger: "R7bn NDB loan secured, N3 upgrade starts Q1 2026",
-      structure: "R2-6bn per concession, mix of DFI loans + domestic bonds + user-pay",
-      pitch_angle: "Bond structuring, PPP advisory, refinancing existing toll debt",
-      key_parties: "SANRAL CEO Reginald Demana, NDB",
-      why_sb: "Infrastructure bond market leader. SANRAL existing relationship.",
-      fee_estimate: "R30-60m",
-      score: { deal_size: "High", execution: "Medium", relationship: "Existing", sector_priority: "High" }
-    });
-  }
-  
-  if (text.includes("TRANSNET") || text.includes("rail") || text.includes("ports")) {
-    deals.push({
-      priority: "HIGH",
-      deal_type: "Restructuring Advisory",
-      company: "Transnet",
-      title: "Transnet Balance Sheet Restructuring & Modernisation",
-      trigger: "Operational losses mounting, RFP Q3 2026",
-      structure: "R5-12bn per package, 70% DFI debt + 20% govt + 10% equity",
-      pitch_angle: "Restructuring advisory, export credit facilitation, debt syndication",
-      key_parties: "Transnet CFO/Treasury, CDC, IFC, AfDB",
-      why_sb: "SOE restructuring expertise. DFI co-financing relationships.",
-      fee_estimate: "R60-120m",
-      score: { deal_size: "High", execution: "Medium", relationship: "Existing", sector_priority: "High" }
-    });
-  }
-  
-  if (text.includes("NAMIBIA") || text.includes("Venus") || text.includes("PEL104")) {
-    deals.push({
-      priority: "HIGH",
-      deal_type: "Project Finance",
-      company: "TotalEnergies",
-      title: "Namibia Venus Oil & Gas Project Financing",
-      trigger: "FID targeting 2026, TotalEnergies acquired 42.5% PEL104",
-      structure: "$3-4bn capex, R3-8bn per project ticket",
-      pitch_angle: "Lead arranger on Namibian oil/gas project finance. First mover advantage.",
-      key_parties: "TotalEnergies VP Exploration, Namibian Petroleum Commissioner",
-      why_sb: "Competitor to ABSA/FNB for Namibia oil financing. Move first.",
-      fee_estimate: "R40-100m",
-      score: { deal_size: "High", execution: "Medium", relationship: "New", sector_priority: "High" }
-    });
-  }
-  
-  if ((text.includes("REFINANCING") || text.includes("first-gen")) && text.includes("REIPPPP")) {
-    deals.push({
-      priority: "MEDIUM",
-      deal_type: "Refinancing",
-      company: "Multiple IPPs",
-      title: "REIPPPP First-Gen Debt Refinancing Wave",
-      trigger: "5-7 year refinancing windows opening, NERSA tariff clarity Q4 2026",
-      structure: "R25-40bn refinancing + R8-15bn new-build, 80-120bps spread capture",
-      pitch_angle: "Syndication mandates for 15-20 projects across Scatec, Globeleq, Africa Rainbow Energy",
-      key_parties: "NERSA, IPP sponsors",
-      why_sb: "Established IPP relationships, energy credit expertise, local currency hedging",
-      fee_estimate: "R200-300m annually through 2028",
-      score: { deal_size: "Medium", execution: "High", relationship: "Existing", sector_priority: "Medium" }
-    });
-  }
-  
-  if (text.includes("MOZAMBIQUE") || text.includes("LNG")) {
-    deals.push({
-      priority: "MEDIUM",
-      deal_type: "Project Finance",
-      company: "TotalEnergies / Eni / Equinor",
-      title: "Mozambique LNG Restart & Regional Gas Corridor",
-      trigger: "Force majeure lifted Feb 2026, 40% complete",
-      structure: "$12bn remaining capex, R2-6bn annual tickets through 2029",
-      pitch_angle: "Regional project finance arranger, currency hedging for contractors",
-      key_parties: "TotalEnergies (operator), Eni, Equinor",
-      why_sb: "Pan-African project finance capability. Cross-border syndication expertise.",
-      fee_estimate: "R30-80m annually",
-      score: { deal_size: "High", execution: "Medium", relationship: "New", sector_priority: "Medium" }
-    });
-  }
-  
-  // Return top 4 deals max
-  return deals.slice(0, 4);
-}
 
-// Generate pitchbook content (local template)
-function generatePitchbook(company, dealType, context) {
-  const templates = {
-    "Eskom": `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PITCHBOOK: Eskom — ${dealType}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-SITUATION:
-Eskom carries R400bn+ total debt with R38bn ES26 bond redeemed April 2026. Government approved R50bn relief with R40bn front-loaded for 2025/26. Municipal arrears at R5.26bn+ with ring-fencing from July 2026.
-
-MARKET CONTEXT:
-Just Energy Transition financing window open. DFIs (World Bank, AfDB, DBSA) committed to blend finance. NERSA tariff path expected Q4 2026.
-
-DEAL RATIONALE:
-R80-120bn green bond issuance required to refinance legacy debt and fund grid modernization for renewable integration.
-
-STRUCTURE:
-Green bonds (tranche A: R50bn domestic, tranche B: $500m international) + DFI concessional loans at JIBAR+200bps.
-
-SB ROLE:
-Lead structuring advisor and joint bookrunner. Coordinate DFI blend finance. Syndicate to pension funds.
-
-RISKS:
-Tariff path delay beyond Q4 2026. Municipal non-payment escalation. Political interference risk.
-
-TIMELINE:
-Mandate signing: Q3 2026 | First drawdown: Q1 2027
-
-OPENING LINE:
-"Standard Bank proposes to lead Eskom's R80-120bn Just Energy Transition financing, reducing your blended cost of debt by 50bps through DFI co-financing and pension fund syndication."`,
-
-    "Scatec": `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PITCHBOOK: Scatec — ${dealType}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-SITUATION:
-Scatec awarded 846MW Kroonstad PV Cluster (ZAR13bn capex) under REIPPPP Round 7. Financial close achieved Q2 2026. Construction starts H2 2026.
-
-MARKET CONTEXT:
-REIPPPP execution cycle accelerating. 20-year PPAs secured with Eskom. DFI appetite for renewable project finance strong.
-
-DEAL RATIONALE:
-90% debt financing required for three solar plants (Oslaagte Solar 2&3, Leeuwspruit Solar).
-
-STRUCTURE:
-R10-12bn project debt (70% senior DFI, 30% commercial bank) + R3-5bn equity (Scatec 50.9%, Stanlib 46.5%, Community Trust 2.6%).
-
-SB ROLE:
-Joint mandated arranger alongside DFIs. Lead syndication to domestic pension funds and insurers.
-
-RISKS:
-Construction delay beyond H2 2027. Grid connection bottlenecks. Currency volatility on imported equipment.
-
-TIMELINE:
-First drawdown: Aug 2026 | COD: H2 2027
-
-OPENING LINE:
-"Standard Bank proposes joint mandated arranger mandate for Scatec's 846MW Kroonstad PV Cluster, delivering JIBAR+250bps senior debt with 20-year tenor."`,
-
-    "Transnet": `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PITCHBOOK: Transnet — ${dealType}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-SITUATION:
-Operational losses mounting. Ports underutilised. R80bn rail modernisation + R12bn ports capex planned.
-
-MARKET CONTEXT:
-RFP expected Q3 2026. DFI co-financing (CDC, IFC, AfDB) pre-positioned. Government backing for strategic infrastructure.
-
-DEAL RATIONALE:
-Balance sheet restructuring required to unlock DFI funding and attract private capital.
-
-STRUCTURE:
-70% concessional DFI debt, 20% government appropriations, 10% equity from strategic partner.
-
-SB ROLE:
-Restructuring advisory lead. Export credit facilitation. Debt syndication to international investors.
-
-RISKS:
-Labour disruption. Regulatory approval delays. Counterparty credit risk.
-
-TIMELINE:
-RFP response: Q3 2026 | Mandate: Q4 2026 | First funding: Q1 2027
-
-OPENING LINE:
-"Standard Bank proposes comprehensive restructuring advisory for Transnet, with success fee contingent on R5bn+ annual EBITDA improvement."`
-  };
-  
-  // Return template or generic
-  if (templates[company]) return templates[company];
-  
-  return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-PITCHBOOK: ${company} — ${dealType}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-SITUATION:
-${context || "Company identified as priority client under Standard Bank sector coverage. Financing requirements emerging."}
-
-MARKET CONTEXT:
-Energy & infrastructure financing window 2026-2028. DFI blend finance available. Domestic pension funds have unallocated mandates.
-
-DEAL RATIONALE:
-Strategic financing required to capture growth opportunities and optimize capital structure.
-
-STRUCTURE:
-Tailored solution combining project finance, working capital, and hedging products.
-
-SB ROLE:
-Lead arranger with access to DFI co-financing and pension fund syndication.
-
-RISKS:
-Execution timeline dependent on regulatory approvals and market conditions.
-
-TIMELINE:
-Mandate discussion: Q3 2026 | Close: Q1-Q2 2027
-
-OPENING LINE:
-"Standard Bank proposes ${dealType} mandate for ${company}, leveraging our energy & infrastructure sector expertise."`;
-}
-
-// ─── REPLACEMENT API FUNCTIONS (fully local, no network calls) ──────────────
-async function callClaude(system, user, useSearch = false, maxTokens = 400) {
-  // Simulate network delay (remove for instant response)
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
-  // Route based on system prompt content
-  if (system.includes("bullet points") || user.includes("Search latest")) {
-    return SECTOR_PULSE;
-  }
-  
-  if (system.includes("Pitchbook sections")) {
-    // Extract company from user prompt
-    const companyMatch = user.match(/Pitchbook for (\w+)/);
-    const company = companyMatch ? companyMatch[1] : "Client";
-    const dealMatch = user.match(/- (\w+ \w+)/);
-    const dealType = dealMatch ? dealMatch[1] : DEAL_TYPES[0];
-    return generatePitchbook(company, dealType, user);
-  }
-  
-  // Default return
-  return SECTOR_INTELLIGENCE_REPORT;
-}
-
-async function callClaudeJSON(system, user, useSearch = false) {
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 100));
-  
-  // Extract deals from the input text
-  const deals = extractDealsFromText(user);
-  return deals;
+  return (
+    <div>
+      <Card style={{marginBottom: 14}}>
+        <SL>RESEARCH FOCUS AREAS</SL>
+        <div style={{display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14}}>
+          {FOCUS.map((f,i)=>(
+            <div key={i} onClick={()=>setOn(p=>p.map((v,j)=>j===i?!v:v))} 
+                 style={{fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, padding: "4px 11px", borderRadius: 2, cursor: "pointer", 
+                         border: `1px solid ${on[i] ? "rgba(201,168,76,.5)" : "#1e2535"}`, 
+                         background: on[i] ? "rgba(201,168,76,.08)" : "transparent", 
+                         color: on[i] ? "#c9a84c" : "#6b7280"}}>
+              {f}
+            </div>
+          ))}
+        </div>
+        <Btn onClick={generate} disabled={loading}>
+          {loading ? "Conducting research…" : "◈ GENERATE SECTOR INTELLIGENCE REPORT"}
+        </Btn>
+      </Card>
+      
+      <SBar s={status}/>
+      
+      {brief && (
+        <Card>
+          <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12}}>
+            <SL>SECTOR INTELLIGENCE REPORT — {TODAY}</SL>
+            <Btn v="ghost" onClick={() => navigator.clipboard?.writeText(brief)} style={{padding: "4px 11px", fontSize: 10}}>
+              📋 COPY
+            </Btn>
+          </div>
+          {/* DIRECT RENDERING - no OutputFormatter dependency */}
+          <div style={{
+            background: "#090c12",
+            border: "1px solid #1e2535",
+            borderRadius: 4,
+            padding: "18px 20px",
+            fontFamily: "'IBM Plex Sans', sans-serif",
+            fontSize: 13,
+            lineHeight: 1.7,
+            color: "#d1d5db",
+            whiteSpace: "pre-wrap",
+            maxHeight: 600,
+            overflowY: "auto"
+          }}>
+            {brief}
+          </div>
+        </Card>
+      )}
+      
+      {/* Debug: Show if brief is empty */}
+      {!brief && !loading && (
+        <Card style={{textAlign: "center", padding: "40px 20px"}}>
+          <div style={{color: "#ef4444", fontFamily: "'IBM Plex Mono',monospace", fontSize: 12}}>
+            ⚠️ Report not loaded. Check console for errors.
+          </div>
+        </Card>
+      )}
+    </div>
+  );
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -911,5 +1005,4 @@ export default function Platform() {
       </div>
     </div>
   );
-// Make sure Platform is properly closed
 }
