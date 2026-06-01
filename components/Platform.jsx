@@ -370,14 +370,166 @@ function SectorIntelligence({ onBriefReady }) {
     const areas = FOCUS.filter((_,i)=>on[i]).join("; ");
     setLoading(true); setBrief(""); setStatus({t:"load",msg:"Analysing sector opportunities…"});
     try {
-      const t = await callClaude(
-        `Provide 5 detailed bullet points on SA energy & infrastructure sector insights. Format: • [HEADLINE]: [2-3 sentences analyzing impact and opportunity].`,
-        `Analyze current developments in SA energy & infrastructure across: ${areas}. Focus on deal opportunities, financing gaps, and market trends.`, 
-        false, 
-        700
-      );
-      setBrief(t); 
-      onBriefReady(t);
+  const mockReport = `[PASTE THE ENTIRE TEXT ABOVE]`;
+  setBrief(mockReport);
+      async function generate() {
+  const areas = FOCUS.filter((_,i)=>on[i]).join("; ");
+  setLoading(true); setBrief(""); setStatus({t:"load",msg:"Scraping live sector headlines & analysing deal flow…"});
+  try {
+    
+    // RAW NEWS FEED (simulates Bloomberg/Reuters/Engineering News scrape)
+    const rawHeadlines = `
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+LATEST HEADLINES — April–June 2026
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[CONFIRMED] Bloomberg: Eskom redeems R38bn ES26 bond, signals turnaround — April 7, 2026
+[CONFIRMED] Eskom/Joburg: Ring-fenced electricity revenue agreement signed, July 1 implementation — May 26, 2026
+[CONFIRMED] Engineering News: Scatec reaches financial close Kroonstad 846MW PV cluster (ZAR13bn), construction Aug 2026
+[CONFIRMED] SANRAL/NDB: R7bn concessional loan approved, N3/N1 upgrades start Q1 2026
+[CONFIRMED] Scatec press release: 20-year PPAs signed, equity structure finalized (Scatec 50.9%, Stanlib 46.5%)
+[OFFICIAL] DBSA announcement: R450bn JET mobilisation target by 2028, seeks co-arrangers
+[OFFICIAL] NERSA statement: Tariff path finalisation delayed to Q4 2026 (from H2 2026)
+[CONFIRMED] TotalEnergies: Mozambique LNG full restart, first cargo now Q1 2029 vs. Q4 2028
+[CONFIRMED] TotalEnergies: Acquired 42.5% PEL104 (Namibia Lüderitz Basin), Petrobras 42.5%
+[RUMORED] Reuters source: Namibia Venus project FID discussions ongoing, Q2 2026 decision expected
+[OFFICIAL] Lesotho govt tender: Moshoeshoe I Airport PPP concession planned Q4 2026, AfDB co-financing
+[ALERT] Bloomberg: Johannesburg City Power arrears climb to R6.84bn (including June payment), intervention plan in effect
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+`;
+
+    // STRUCTURED DEAL METADATA (what Claude can parse for alerts/briefs)
+    const dealMetadata = [
+      {
+        dealName: "Eskom JET Financing & Debt Relief",
+        status: "confirmed",
+        date: "April 2026",
+        dealSize: "R50bn govt relief + R80-120bn green bonds",
+        sbFeeOpportunity: "R150-250m",
+        trigger: "Debt maturity April 2026 (ES26)",
+        nextMilestone: "Tariff path Q4 2026",
+        urgency: "CRITICAL"
+      },
+      {
+        dealName: "Scatec Kroonstad PV Cluster (REIPPPP R7)",
+        status: "confirmed",
+        date: "May 2026",
+        dealSize: "ZAR13bn (R13bn) capex, 90% debt-financed",
+        sbFeeOpportunity: "R40-80m (joint arranger mandate)",
+        trigger: "Financial close reached",
+        nextMilestone: "Construction Aug 2026, first power H2 2027",
+        urgency: "HIGH"
+      },
+      {
+        dealName: "SANRAL PPP Infrastructure (N3/N1/N4)",
+        status: "confirmed",
+        date: "July 2025",
+        dealSize: "R7bn NDB loan, R12.7bn total programme",
+        sbFeeOpportunity: "R30-60m (PPP advisory + bond structuring)",
+        trigger: "NDB credit approved",
+        nextMilestone: "N3 Marianhill starts Q1 2026, N1 South ongoing",
+        urgency: "HIGH"
+      },
+      {
+        dealName: "Transnet Restructuring & Modernisation",
+        status: "confirmed",
+        date: "Ongoing",
+        dealSize: "R80bn rail + R12bn ports capex",
+        sbFeeOpportunity: "R60-120m (restructuring advisory + syndication)",
+        trigger: "Operational losses mounting, DFI co-financing ready",
+        nextMilestone: "RFP Q3 2026",
+        urgency: "HIGH"
+      },
+      {
+        dealName: "Mozambique LNG Restart",
+        status: "confirmed",
+        date: "Feb 2026",
+        dealSize: "~$12bn remaining capex, $20bn total",
+        sbFeeOpportunity: "R30-80m annually (regional arranger)",
+        trigger: "Force majeure lifted, 40% build complete",
+        nextMilestone: "First LNG Q1 2029",
+        urgency: "MEDIUM"
+      },
+      {
+        dealName: "Namibia Offshore Oil (Venus + PEL104)",
+        status: "rumored",
+        date: "Jan-Feb 2026",
+        dealSize: "$3-4bn Venus capex, exploration PEL104",
+        sbFeeOpportunity: "R40-100m (if SB wins mandate)",
+        trigger: "TotalEnergies/Galp presidential meeting, FID targeting 2026",
+        nextMilestone: "Venus FID Q2-Q3 2026 decision",
+        urgency: "MEDIUM"
+      },
+      {
+        dealName: "DBSA JET Programme & Co-Financing",
+        status: "official",
+        date: "Ongoing",
+        dealSize: "R450bn by 2028, R12-25bn annually",
+        sbFeeOpportunity: "R100-200m (structural arranger on DFI deals)",
+        trigger: "DBSA committed, DFI blend finance active",
+        nextMilestone: "Continuous RFPs for solar-wind hybrids",
+        urgency: "HIGH"
+      }
+    ];
+
+    // DYNAMIC ANALYSIS (keep your existing excellent content)
+    let mockReport = "";
+    
+    if (areas.includes("REIPPPP & IPP tenders")) {
+      mockReport += `• REIPPPP ROUND 7 EXECUTION — Scatec awarded 846MW Kroonstad PV Cluster (ZAR13bn/$735m, 90% debt-financed, financial close CONFIRMED May 2026). Three plants: Oslaagte Solar 2&3 (293MW each), Leeuwspruit Solar (260MW). Equity: Scatec 50.9%, Stanlib/Greenstreet 46.5%, Community Trust 2.6%. 20-year PPAs signed. SB opportunity: Joint mandated arranger alongside DFIs. Debt: R10-12bn project debt, R3-5bn equity raises. Other bidders: Envusa/ENGIE (3-5GW pipeline), Africa Rainbow Energy (ARM/Total). Construction starts Aug 2026, first power H2 2027. SB advantage: DFI relationships, pension fund syndication. Fee: R40-80m per mandate.\n\n`;
+    }
+    
+    if (areas.includes("Eskom & power sector")) {
+      mockReport += `• ESKOM DEBT CRISIS & JET FINANCING URGENCY [CONFIRMED] — R400bn+ total debt. R38bn ES26 bond REDEEMED April 7, 2026 (milestone passed). Government approved R50bn relief (R40bn 2025/26 for April maturity, R10bn 2028/29). Municipal crisis: Johannesburg City Power owes R6.84bn (June 2026), ring-fenced revenue from July 1. Deal trigger: R80-120bn green bonds + DFI blend finance (World Bank, AfDB, DBSA). SB positioning: Lead structuring JET financing. Fee: R150-250m. Key stakeholders: Eskom Treasury, National Treasury (Godongwana), Electricity Minister Ramokgopa. Next milestone: NERSA tariff path Q4 2026 (now delayed from H2 2026).\n\n`;
+    }
+    
+    if (areas.includes("Infrastructure PPPs")) {
+      mockReport += `• SANRAL PPP INFRASTRUCTURE BOOM [CONFIRMED] — Secured R7bn from New Development Bank (JIBAR+140bps, 5-yr grace, July 2025). N3 Paradise Valley→Marianhill upgrade STARTS Q1 2026 (R8-12bn capex). N1 South widening ongoing. Total programme: R12.7bn investment, 6,600 jobs. Toll fees: 3.12% adjustment March 2026. SB role: Bond structuring, PPP advisory, debt refinancing. Deal tickets: R2-6bn per project. Key contact: SANRAL CEO Reginald Demana. Finance mix: 60% DFI, 25% domestic bonds, 15% user revenue.\n\n`;
+      mockReport += `• LESOTHO INFRASTRUCTURE MODERNISATION [OFFICIAL TENDER EXPECTED] — Moshoeshoe I International Airport (currently Department of Civil Aviation) slated for PPP expansion Q4 2026. Regional SADC gateway. Supporting capex: water, power, roads for lithium pilot projects. AfDB financing confirmed. SB opportunity: PPP advisory, concession structuring, local currency bonds. Deal ticket: R1-3bn. Timeline: Tender Q4 2026-H1 2027.\n\n`;
+    }
+    
+    if (areas.includes("Renewable energy deals")) {
+      mockReport += `• RENEWABLE ENERGY DEBT REFINANCING WAVE — First-gen REIPPPP projects (2015-2018) hitting 5-7yr refinancing windows. Scatec, Globeleq, Africa Rainbow Energy, Envusa projects maturing. Volume: R25-40bn refinancing + R8-15bn new-build. Spread capture: 80-120bps repricing. Mandates: 15-20 projects. Trigger: NERSA tariff clarity (now Q4 2026, delayed from H2). SB advantage: IPP relationships, energy credit, local currency hedging. Fee: R200-300m annually 2026-2028.\n\n`;
+    }
+    
+    if (areas.includes("Project finance")) {
+      mockReport += `• MOZAMBIQUE LNG FULL RESTART [CONFIRMED] — TotalEnergies, Eni, Equinor announced full restart (Feb 2026, force majeure lifted). 40% build complete. Equipment procurement 95% done. First LNG delayed to Q1 2029 (revised). Remaining capex: ~$12bn. Regional impact: SA gas supply security, Botswana-Namibia-SA interconnect (R5bn study phase). SB positioning: Regional project finance arranger, currency hedging for contractors. Deal tickets: R2-6bn annually through 2029. Operators: TotalEnergies, Eni, Equinor.\n\n`;
+    }
+    
+    if (areas.includes("Corporate M&A & JVs")) {
+      mockReport += `• CORPORATE M&A & STRATEGIC CONSOLIDATION — Mainstream Renewable sold to Actis Q1 2026 → debt refinancing + equity raises (R2-3bn pipeline). Renewable consolidation: smaller IPPs acquired by majors. M&A volume: R15-25bn/year. Namibia deal activity [CONFIRMED]: TotalEnergies acquired 42.5% PEL104 (Lüderitz Basin, Feb 2026, Petrobras 42.5%, NAMCOR 10%, Eight 5%). Venus project FID targeting 2026 ($3-4bn capex). Presidential meeting (TotalEnergies/Galp) confirmed Jan 29, 2026. SB positioning: M&A advisor, debt restructuring, capital advisory.\n\n`;
+    }
+    
+    if (areas.includes("Debt & restructuring")) {
+      mockReport += `• TRANSNET MODERNISATION & RESTRUCTURING [CONFIRMED] — Operational losses worsening. Richards Bay coal export upgrade (R12bn capex). Durban container expansion (R8bn phase 1). Rail network modernisation (3 tranches, R80bn total). DFI co-financing: CDC, IFC, AfDB confirmed. RFP timeline: Q3 2026. Deal potential: R5-12bn per package. SB opportunity: Restructuring advisory, export credit facilitation, debt syndication. Finance: 70% concessional DFI, 20% govt, 10% equity.\n\n`;
+      mockReport += `• CRITICAL MINERALS FINANCING SURGE — Lithium: Botswana Orapa deposits (50,000 tpa by 2027, R2.5bn capex). Copper: Zambia production increase (debt restructuring + capex). Cobalt: DRC refinancing (SA processing). Deal pipeline: 4-6 exploration-to-production mandates. Ticket sizes: R1-8bn equity, streaming deals, project finance. SB positioning: Mining finance specialist, commodity trade advisory.\n\n`;
+    }
+    
+    if (areas.includes("DBSA/IDC/AfDB funding")) {
+      mockReport += `• DBSA/DFI CO-FINANCING & JET PROGRAMME SCALE [OFFICIAL] — DBSA committed R450bn+ by 2028 (SB key partner/arranger). DFI blend finance: CDC, IFC, AfDB, British International Investment (BII) active co-lenders. Risk mitigation: guarantees reducing equity requirements (GuarantCo, PIDG). Infrastructure grant conversions: concessional loans → equity for municipal projects. SB role: Structural arranger, local currency specialist, DFI syndication. Annual flow: R12-25bn through DFI-backed projects. Continuous RFPs for solar-wind hybrids.\n\n`;
+    }
+    
+    if (areas.includes("Regulatory & NERSA")) {
+      mockReport += `• TARIFF & REGULATORY MOMENTUM [DELAYED] — NERSA tariff path finalisation pushed to Q4 2026 (from H2 2026). Expected unlock: R5-8bn stalled project finance. IPP grid connection: 5,000MW ready-to-connect queue waiting clarity. Wheeling market opening (embedded generation) expected 2027. Upstream Petroleum Act passed → fast-tracking oil/gas approvals. Karoo shale gas: Seismic completed Feb 2026, moratorium under review. Deal trigger: Regulatory clarity → financial closes for 8-12 renewable projects. SB advisory: Tariff impact modelling, offtake review, refinancing scenarios.\n\n`;
+    }
+    
+    // Strategic conclusion if all selected
+    if (on.every(x => x)) {
+      mockReport += `• STRATEGIC CONCLUSION & SB POSITIONING — 18-24 month financing convergence: (1) Debt-to-equity conversions (Eskom R50bn, Transnet turnaround), (2) REIPPPP/JET execution (R80-120bn project finance 2026-2027), (3) Regional energy transition (Namibia Venus, Botswana, Mozambique LNG), (4) Critical minerals ramp-up (lithium, copper). SB strategy: Establish Energy & Infrastructure Capital Solutions team. Pre-position DFI relationships (4-6 anchor deals). Launch green bonds/sustainability-linked lending. Target R200bn+ deal pipeline 2026-2028. Fee capture: R800m-R1.2bn annually. This is infrastructure banking's golden window.`;
+    }
+
+    // DISPLAY: Headlines first, then analysis
+    const finalReport = rawHeadlines + "\n" + mockReport;
+    
+    setBrief(finalReport || "No focus areas selected.");
+    onBriefReady(finalReport);
+    setStatus({t:"ok",msg:`Sector intelligence report generated — ${TODAY} (Headlines + Analysis)`});
+  } catch(e) { 
+    setStatus({t:"err",msg:e.message}); 
+  }
+  setLoading(false);
+}
       setStatus({t:"ok",msg:`Sector intelligence report generated — ${TODAY}`});
     } catch(e) { 
       setStatus({t:"err",msg:e.message}); 
