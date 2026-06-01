@@ -183,11 +183,10 @@ const In = ({ value, onChange, placeholder, style={} }) => (
 );
 
 const Sel = ({ value, onChange, options, style={} }) => (
-  <select value={value} onChange={e=>onChange(e.target.value)} style={{background:"#090c12",border:"1px solid #1e2535",borderRadius:4,padding:"9px 13px",color:"#e8eaf0",fontSize:12,outline:"none",width:"100%",boxSizing:"border-box",...style}}>
+  <select ...>
     {options.map(o=><option key={o}>{o}</option>)}
   </select>
-);
-}
+);  // <-- Correct: ends with ); and no extra brace
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1: SECTOR COMMAND — Performance Dashboard with Live Market Data
 // ════════════════════════════════════════════════════════════════════════════
