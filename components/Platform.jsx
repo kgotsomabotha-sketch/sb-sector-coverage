@@ -187,7 +187,7 @@ const Sel = ({ value, onChange, options, style={} }) => (
     {options.map(o=><option key={o}>{o}</option>)}
   </select>
 );
-
+}
 // ════════════════════════════════════════════════════════════════════════════
 // MODULE 1: SECTOR COMMAND — Performance Dashboard with Live Market Data
 // ════════════════════════════════════════════════════════════════════════════
@@ -1578,4 +1578,5 @@ export default function Platform() {
       </div>
     </div>
   );
+// Make sure Platform is properly closed
 }
