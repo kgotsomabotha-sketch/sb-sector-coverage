@@ -496,6 +496,7 @@ STANDARD BANK EXECUTION PRIORITIES:
 ⚠️ Infrastructure banking's golden window — execution required through 2026-2027`;
 
   useEffect(() => {
+    console.log("Setting report, length:", REPORT.length);
     setBrief(REPORT);
     if (onBriefReady) onBriefReady(REPORT);
     setStatus({t:"ok", msg: "Sector intelligence report generated — 15+ deals analyzed"});
@@ -506,6 +507,7 @@ STANDARD BANK EXECUTION PRIORITIES:
     setStatus({t:"load", msg: "Scraping live sector headlines & analysing deal flow…"});
     
     setTimeout(() => {
+      console.log("Generate complete, setting report");
       setBrief(REPORT);
       if (onBriefReady) onBriefReady(REPORT);
       setStatus({t:"ok", msg: `Sector intelligence report generated — ${TODAY}`});
@@ -543,7 +545,31 @@ STANDARD BANK EXECUTION PRIORITIES:
               📋 COPY
             </Btn>
           </div>
-          <OutputFormatter text={brief}/>
+          {/* DIRECT RENDERING - no OutputFormatter dependency */}
+          <div style={{
+            background: "#090c12",
+            border: "1px solid #1e2535",
+            borderRadius: 4,
+            padding: "18px 20px",
+            fontFamily: "'IBM Plex Sans', sans-serif",
+            fontSize: 13,
+            lineHeight: 1.7,
+            color: "#d1d5db",
+            whiteSpace: "pre-wrap",
+            maxHeight: 600,
+            overflowY: "auto"
+          }}>
+            {brief}
+          </div>
+        </Card>
+      )}
+      
+      {/* Debug: Show if brief is empty */}
+      {!brief && !loading && (
+        <Card style={{textAlign: "center", padding: "40px 20px"}}>
+          <div style={{color: "#ef4444", fontFamily: "'IBM Plex Mono',monospace", fontSize: 12}}>
+            ⚠️ Report not loaded. Check console for errors.
+          </div>
         </Card>
       )}
     </div>
