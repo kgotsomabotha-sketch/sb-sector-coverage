@@ -366,7 +366,10 @@ function SectorIntelligence({ onBriefReady }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
 
-  const REPORT = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  // ─── LOCAL INTELLIGENCE ENGINE — No API required ──────────────────────────────
+
+// Complete sector intelligence report (pre-built, instant)
+const SECTOR_INTELLIGENCE_REPORT = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ESKOM DEBT CRISIS & JET FINANCING URGENCY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • R400bn+ total debt, R38bn ES26 bond redeemed (April 2026)
@@ -429,14 +432,6 @@ NAMIBIA OIL & GAS ACCELERATION
 • SB positioning: Lead arranger on Namibian oil/gas project finance
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-BOTSWANA ENERGY TRANSITION & REGIONAL POWER TRADING
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• New government (Duma Boko, Nov 2024) shifting energy strategy
-• Regional LNG interest from Namibia Venus project
-• Botswana seeks power export agreements (SADC energy pool)
-• SB opportunity: Regional energy trader finance, cross-border advisory
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 RENEWABLE ENERGY DEBT REFINANCING WAVE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 • First-gen REIPPPP projects (2015-2018) hitting 5-7yr refinancing windows
@@ -444,40 +439,6 @@ RENEWABLE ENERGY DEBT REFINANCING WAVE
 • Spread capture: 80-120bps repricing
 • 15-20 projects seeking mandates
 • SB fee opportunity: R200-300m annually through 2028
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CRITICAL MINERALS FINANCING SURGE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Lithium: Botswana Orapa deposits (50,000 tpa by 2027, R2.5bn capex)
-• Copper: Zambia production increase (debt restructuring + capex)
-• Cobalt: DRC refinancing (South African processing)
-• Deal pipeline: 4-6 exploration-to-production mandates
-• Ticket sizes: R1-8bn equity raises, streaming deals, project finance
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-LESOTHO INFRASTRUCTURE MODERNISATION
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Moshoeshoe I International Airport identified for PPP expansion
-• Regional gateway linking Lesotho to SADC trade corridors
-• AfDB pipeline funding identified
-• SB opportunity: PPP advisory, concession structuring, local currency bonds
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DBSA/DFI CO-FINANCING & JET PROGRAMME SCALE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• DBSA committed R450bn+ by 2028
-• DFI blend finance: CDC, IFC, AfDB, BII active co-lenders
-• Risk mitigation: guarantees (GuarantCo, PIDG)
-• SB role: Structural arranger, local currency specialist
-• Annual deal flow: R12-25bn through DFI-backed projects
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-TARIFF & REGULATORY MOMENTUM
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• NERSA tariff path finalisation (Q4 2026) unlocking R5-8bn stalled commitments
-• IPP grid connection acceleration: 5,000MW ready-to-connect queue
-• Wheeling market opening expected 2027
-• Upstream Petroleum Act passed — fast-tracking oil/gas approvals
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 STRATEGIC CONCLUSION — 18-24 MONTH FINANCING CONVERGENCE
@@ -495,85 +456,284 @@ STANDARD BANK EXECUTION PRIORITIES:
 
 ⚠️ Infrastructure banking's golden window — execution required through 2026-2027`;
 
-  useEffect(() => {
-    console.log("Setting report, length:", REPORT.length);
-    setBrief(REPORT);
-    if (onBriefReady) onBriefReady(REPORT);
-    setStatus({t:"ok", msg: "Sector intelligence report generated — 15+ deals analyzed"});
-  }, []);
+// Live sector pulse (pre-built headlines)
+const SECTOR_PULSE = `• ESKOM: R38bn ES26 bond successfully redeemed April 2026. Government R50bn relief package approved. Municipal ring-fencing begins July 2026.
+• REIPPPP: Scatec reaches financial close on 846MW Kroonstad PV Cluster. Construction starts H2 2026. 20-year PPAs executed.
+• SANRAL: R7bn NDB loan secured for N3/N1 upgrades. Toll road adjustments at 3.12% for 2026.
+• TRANSNET: R80bn rail modernisation RFP expected Q3 2026. DFI co-financing pipeline confirmed.
+• MOZAMBIQUE LNG: Force majeure lifted. First cargo now Q1 2029. $12bn remaining capex.
+• NAMIBIA: TotalEnergies acquires 42.5% PEL104. Venus FID targeting 2026.`;
 
-  async function generate() {
-    setLoading(true); 
-    setStatus({t:"load", msg: "Scraping live sector headlines & analysing deal flow…"});
-    
-    setTimeout(() => {
-      console.log("Generate complete, setting report");
-      setBrief(REPORT);
-      if (onBriefReady) onBriefReady(REPORT);
-      setStatus({t:"ok", msg: `Sector intelligence report generated — ${TODAY}`});
-      setLoading(false);
-    }, 800);
+// Extract deals from text (local replacement for Claude)
+function extractDealsFromText(text) {
+  const deals = [];
+  
+  if (text.includes("ESKOM") || text.toLowerCase().includes("esk")) {
+    deals.push({
+      priority: "HIGH",
+      deal_type: "Debt Restructuring",
+      company: "Eskom",
+      title: "Eskom JET Financing & Green Bond Issuance",
+      trigger: "R38bn ES26 bond redeemed April 2026, R50bn govt relief approved",
+      structure: "R80-120bn green bonds + DFI blend finance (World Bank, AfDB, DBSA)",
+      pitch_angle: "Lead structuring on Just Energy Transition financing. Fee opportunity R150-250m.",
+      key_parties: "Eskom Treasury, National Treasury (Godongwana), Ramokgopa",
+      why_sb: "Market leader in SOE debt restructuring. DFI relationships in place.",
+      fee_estimate: "R150-250m",
+      score: { deal_size: "High", execution: "High", relationship: "Existing", sector_priority: "Critical" }
+    });
   }
+  
+  if (text.includes("SCATEC") || text.includes("REIPPPP") || text.includes("Kroonstad")) {
+    deals.push({
+      priority: "HIGH",
+      deal_type: "Project Finance",
+      company: "Scatec",
+      title: "Scatec Kroonstad 846MW PV Cluster - REIPPPP Round 7",
+      trigger: "Financial close Q2 2026, construction starts H2 2026",
+      structure: "R10-12bn project debt (90% financed), R3-5bn equity raises",
+      pitch_angle: "Joint mandated arranger alongside DFIs. Established relationships with Scatec.",
+      key_parties: "Scatec management, Stanlib/Greenstreet, Community Trust",
+      why_sb: "Lead arranger on previous REIPPPP rounds. DFI co-financing expertise.",
+      fee_estimate: "R40-80m",
+      score: { deal_size: "High", execution: "High", relationship: "Existing", sector_priority: "High" }
+    });
+  }
+  
+  if (text.includes("SANRAL") || text.includes("NDB") || text.includes("toll")) {
+    deals.push({
+      priority: "HIGH",
+      deal_type: "PPP Advisory",
+      company: "SANRAL",
+      title: "SANRAL N3/N1 Toll Road PPP Financing",
+      trigger: "R7bn NDB loan secured, N3 upgrade starts Q1 2026",
+      structure: "R2-6bn per concession, mix of DFI loans + domestic bonds + user-pay",
+      pitch_angle: "Bond structuring, PPP advisory, refinancing existing toll debt",
+      key_parties: "SANRAL CEO Reginald Demana, NDB",
+      why_sb: "Infrastructure bond market leader. SANRAL existing relationship.",
+      fee_estimate: "R30-60m",
+      score: { deal_size: "High", execution: "Medium", relationship: "Existing", sector_priority: "High" }
+    });
+  }
+  
+  if (text.includes("TRANSNET") || text.includes("rail") || text.includes("ports")) {
+    deals.push({
+      priority: "HIGH",
+      deal_type: "Restructuring Advisory",
+      company: "Transnet",
+      title: "Transnet Balance Sheet Restructuring & Modernisation",
+      trigger: "Operational losses mounting, RFP Q3 2026",
+      structure: "R5-12bn per package, 70% DFI debt + 20% govt + 10% equity",
+      pitch_angle: "Restructuring advisory, export credit facilitation, debt syndication",
+      key_parties: "Transnet CFO/Treasury, CDC, IFC, AfDB",
+      why_sb: "SOE restructuring expertise. DFI co-financing relationships.",
+      fee_estimate: "R60-120m",
+      score: { deal_size: "High", execution: "Medium", relationship: "Existing", sector_priority: "High" }
+    });
+  }
+  
+  if (text.includes("NAMIBIA") || text.includes("Venus") || text.includes("PEL104")) {
+    deals.push({
+      priority: "HIGH",
+      deal_type: "Project Finance",
+      company: "TotalEnergies",
+      title: "Namibia Venus Oil & Gas Project Financing",
+      trigger: "FID targeting 2026, TotalEnergies acquired 42.5% PEL104",
+      structure: "$3-4bn capex, R3-8bn per project ticket",
+      pitch_angle: "Lead arranger on Namibian oil/gas project finance. First mover advantage.",
+      key_parties: "TotalEnergies VP Exploration, Namibian Petroleum Commissioner",
+      why_sb: "Competitor to ABSA/FNB for Namibia oil financing. Move first.",
+      fee_estimate: "R40-100m",
+      score: { deal_size: "High", execution: "Medium", relationship: "New", sector_priority: "High" }
+    });
+  }
+  
+  if ((text.includes("REFINANCING") || text.includes("first-gen")) && text.includes("REIPPPP")) {
+    deals.push({
+      priority: "MEDIUM",
+      deal_type: "Refinancing",
+      company: "Multiple IPPs",
+      title: "REIPPPP First-Gen Debt Refinancing Wave",
+      trigger: "5-7 year refinancing windows opening, NERSA tariff clarity Q4 2026",
+      structure: "R25-40bn refinancing + R8-15bn new-build, 80-120bps spread capture",
+      pitch_angle: "Syndication mandates for 15-20 projects across Scatec, Globeleq, Africa Rainbow Energy",
+      key_parties: "NERSA, IPP sponsors",
+      why_sb: "Established IPP relationships, energy credit expertise, local currency hedging",
+      fee_estimate: "R200-300m annually through 2028",
+      score: { deal_size: "Medium", execution: "High", relationship: "Existing", sector_priority: "Medium" }
+    });
+  }
+  
+  if (text.includes("MOZAMBIQUE") || text.includes("LNG")) {
+    deals.push({
+      priority: "MEDIUM",
+      deal_type: "Project Finance",
+      company: "TotalEnergies / Eni / Equinor",
+      title: "Mozambique LNG Restart & Regional Gas Corridor",
+      trigger: "Force majeure lifted Feb 2026, 40% complete",
+      structure: "$12bn remaining capex, R2-6bn annual tickets through 2029",
+      pitch_angle: "Regional project finance arranger, currency hedging for contractors",
+      key_parties: "TotalEnergies (operator), Eni, Equinor",
+      why_sb: "Pan-African project finance capability. Cross-border syndication expertise.",
+      fee_estimate: "R30-80m annually",
+      score: { deal_size: "High", execution: "Medium", relationship: "New", sector_priority: "Medium" }
+    });
+  }
+  
+  // Return top 4 deals max
+  return deals.slice(0, 4);
+}
 
-  return (
-    <div>
-      <Card style={{marginBottom: 14}}>
-        <SL>RESEARCH FOCUS AREAS</SL>
-        <div style={{display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 14}}>
-          {FOCUS.map((f,i)=>(
-            <div key={i} onClick={()=>setOn(p=>p.map((v,j)=>j===i?!v:v))} 
-                 style={{fontFamily: "'IBM Plex Mono',monospace", fontSize: 11, padding: "4px 11px", borderRadius: 2, cursor: "pointer", 
-                         border: `1px solid ${on[i] ? "rgba(201,168,76,.5)" : "#1e2535"}`, 
-                         background: on[i] ? "rgba(201,168,76,.08)" : "transparent", 
-                         color: on[i] ? "#c9a84c" : "#6b7280"}}>
-              {f}
-            </div>
-          ))}
-        </div>
-        <Btn onClick={generate} disabled={loading}>
-          {loading ? "Conducting research…" : "◈ GENERATE SECTOR INTELLIGENCE REPORT"}
-        </Btn>
-      </Card>
-      
-      <SBar s={status}/>
-      
-      {brief && (
-        <Card>
-          <div style={{display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12}}>
-            <SL>SECTOR INTELLIGENCE REPORT — {TODAY}</SL>
-            <Btn v="ghost" onClick={() => navigator.clipboard?.writeText(brief)} style={{padding: "4px 11px", fontSize: 10}}>
-              📋 COPY
-            </Btn>
-          </div>
-          {/* DIRECT RENDERING - no OutputFormatter dependency */}
-          <div style={{
-            background: "#090c12",
-            border: "1px solid #1e2535",
-            borderRadius: 4,
-            padding: "18px 20px",
-            fontFamily: "'IBM Plex Sans', sans-serif",
-            fontSize: 13,
-            lineHeight: 1.7,
-            color: "#d1d5db",
-            whiteSpace: "pre-wrap",
-            maxHeight: 600,
-            overflowY: "auto"
-          }}>
-            {brief}
-          </div>
-        </Card>
-      )}
-      
-      {/* Debug: Show if brief is empty */}
-      {!brief && !loading && (
-        <Card style={{textAlign: "center", padding: "40px 20px"}}>
-          <div style={{color: "#ef4444", fontFamily: "'IBM Plex Mono',monospace", fontSize: 12}}>
-            ⚠️ Report not loaded. Check console for errors.
-          </div>
-        </Card>
-      )}
-    </div>
-  );
+// Generate pitchbook content (local template)
+function generatePitchbook(company, dealType, context) {
+  const templates = {
+    "Eskom": `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PITCHBOOK: Eskom — ${dealType}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SITUATION:
+Eskom carries R400bn+ total debt with R38bn ES26 bond redeemed April 2026. Government approved R50bn relief with R40bn front-loaded for 2025/26. Municipal arrears at R5.26bn+ with ring-fencing from July 2026.
+
+MARKET CONTEXT:
+Just Energy Transition financing window open. DFIs (World Bank, AfDB, DBSA) committed to blend finance. NERSA tariff path expected Q4 2026.
+
+DEAL RATIONALE:
+R80-120bn green bond issuance required to refinance legacy debt and fund grid modernization for renewable integration.
+
+STRUCTURE:
+Green bonds (tranche A: R50bn domestic, tranche B: $500m international) + DFI concessional loans at JIBAR+200bps.
+
+SB ROLE:
+Lead structuring advisor and joint bookrunner. Coordinate DFI blend finance. Syndicate to pension funds.
+
+RISKS:
+Tariff path delay beyond Q4 2026. Municipal non-payment escalation. Political interference risk.
+
+TIMELINE:
+Mandate signing: Q3 2026 | First drawdown: Q1 2027
+
+OPENING LINE:
+"Standard Bank proposes to lead Eskom's R80-120bn Just Energy Transition financing, reducing your blended cost of debt by 50bps through DFI co-financing and pension fund syndication."`,
+
+    "Scatec": `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PITCHBOOK: Scatec — ${dealType}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SITUATION:
+Scatec awarded 846MW Kroonstad PV Cluster (ZAR13bn capex) under REIPPPP Round 7. Financial close achieved Q2 2026. Construction starts H2 2026.
+
+MARKET CONTEXT:
+REIPPPP execution cycle accelerating. 20-year PPAs secured with Eskom. DFI appetite for renewable project finance strong.
+
+DEAL RATIONALE:
+90% debt financing required for three solar plants (Oslaagte Solar 2&3, Leeuwspruit Solar).
+
+STRUCTURE:
+R10-12bn project debt (70% senior DFI, 30% commercial bank) + R3-5bn equity (Scatec 50.9%, Stanlib 46.5%, Community Trust 2.6%).
+
+SB ROLE:
+Joint mandated arranger alongside DFIs. Lead syndication to domestic pension funds and insurers.
+
+RISKS:
+Construction delay beyond H2 2027. Grid connection bottlenecks. Currency volatility on imported equipment.
+
+TIMELINE:
+First drawdown: Aug 2026 | COD: H2 2027
+
+OPENING LINE:
+"Standard Bank proposes joint mandated arranger mandate for Scatec's 846MW Kroonstad PV Cluster, delivering JIBAR+250bps senior debt with 20-year tenor."`,
+
+    "Transnet": `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PITCHBOOK: Transnet — ${dealType}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SITUATION:
+Operational losses mounting. Ports underutilised. R80bn rail modernisation + R12bn ports capex planned.
+
+MARKET CONTEXT:
+RFP expected Q3 2026. DFI co-financing (CDC, IFC, AfDB) pre-positioned. Government backing for strategic infrastructure.
+
+DEAL RATIONALE:
+Balance sheet restructuring required to unlock DFI funding and attract private capital.
+
+STRUCTURE:
+70% concessional DFI debt, 20% government appropriations, 10% equity from strategic partner.
+
+SB ROLE:
+Restructuring advisory lead. Export credit facilitation. Debt syndication to international investors.
+
+RISKS:
+Labour disruption. Regulatory approval delays. Counterparty credit risk.
+
+TIMELINE:
+RFP response: Q3 2026 | Mandate: Q4 2026 | First funding: Q1 2027
+
+OPENING LINE:
+"Standard Bank proposes comprehensive restructuring advisory for Transnet, with success fee contingent on R5bn+ annual EBITDA improvement."`
+  };
+  
+  // Return template or generic
+  if (templates[company]) return templates[company];
+  
+  return `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+PITCHBOOK: ${company} — ${dealType}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+SITUATION:
+${context || "Company identified as priority client under Standard Bank sector coverage. Financing requirements emerging."}
+
+MARKET CONTEXT:
+Energy & infrastructure financing window 2026-2028. DFI blend finance available. Domestic pension funds have unallocated mandates.
+
+DEAL RATIONALE:
+Strategic financing required to capture growth opportunities and optimize capital structure.
+
+STRUCTURE:
+Tailored solution combining project finance, working capital, and hedging products.
+
+SB ROLE:
+Lead arranger with access to DFI co-financing and pension fund syndication.
+
+RISKS:
+Execution timeline dependent on regulatory approvals and market conditions.
+
+TIMELINE:
+Mandate discussion: Q3 2026 | Close: Q1-Q2 2027
+
+OPENING LINE:
+"Standard Bank proposes ${dealType} mandate for ${company}, leveraging our energy & infrastructure sector expertise."`;
+}
+
+// ─── REPLACEMENT API FUNCTIONS (fully local, no network calls) ──────────────
+async function callClaude(system, user, useSearch = false, maxTokens = 400) {
+  // Simulate network delay (remove for instant response)
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  // Route based on system prompt content
+  if (system.includes("bullet points") || user.includes("Search latest")) {
+    return SECTOR_PULSE;
+  }
+  
+  if (system.includes("Pitchbook sections")) {
+    // Extract company from user prompt
+    const companyMatch = user.match(/Pitchbook for (\w+)/);
+    const company = companyMatch ? companyMatch[1] : "Client";
+    const dealMatch = user.match(/- (\w+ \w+)/);
+    const dealType = dealMatch ? dealMatch[1] : DEAL_TYPES[0];
+    return generatePitchbook(company, dealType, user);
+  }
+  
+  // Default return
+  return SECTOR_INTELLIGENCE_REPORT;
+}
+
+async function callClaudeJSON(system, user, useSearch = false) {
+  // Simulate network delay
+  await new Promise(resolve => setTimeout(resolve, 100));
+  
+  // Extract deals from the input text
+  const deals = extractDealsFromText(user);
+  return deals;
 }
 
 // ════════════════════════════════════════════════════════════════════════════
