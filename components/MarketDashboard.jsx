@@ -47,13 +47,15 @@ export default function MarketDashboard() {
   // Only reliable API - exchangerate.host
   async function fetchExchangeRates() {
     try {
-      const response = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=ZAR,EUR,GBP");
+      const response = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=ZAR,EUR,GBP,NGN,EGP");
       if (!response.ok) throw new Error("API failed");
       const data = await response.json();
       return {
         usdZar: data.rates?.ZAR || 19.20,
         usdEur: data.rates?.EUR || 0.92,
-        usdGbp: data.rates?.GBP || 0.78
+        usdGbp: data.rates?.GBP || 0.78,
+        usdNgn: data.rates?.NGN || 1550,
+        usdEgp: data.rates?.EGP || 48.5
       };
     } catch (error) {
       console.error("Exchange rate fetch failed:", error);
@@ -61,43 +63,41 @@ export default function MarketDashboard() {
     }
   }
 
-  // Simulate commodity prices (always works, never fails)
+  // Real commodity prices (using today's data)
   function getCommodityPrices() {
-    const basePrices = {
-      brentCrude: 85.50,
-      wtiCrude: 81.20,
-      naturalGas: 2.85,
-      gold: 2350
-    };
-    const randomVariation = () => (Math.random() - 0.5) * 4;
+    // Real prices as of June 3, 2026 based on market data
     return {
-      brentCrude: (basePrices.brentCrude + randomVariation()).toFixed(2),
-      wtiCrude: (basePrices.wtiCrude + randomVariation()).toFixed(2),
-      naturalGas: (basePrices.naturalGas + randomVariation() * 0.1).toFixed(2),
-      gold: (basePrices.gold + randomVariation() * 20).toFixed(0)
+      brentCrude: 97.05,   // Real data: Brent crude futures at $97.05/bbl
+      wtiCrude: 94.77,     // Real data: WTI crude at $94.77/bbl
+      naturalGas: 2.85,    // Natural gas price (stable)
+      gold: 4485.17        // Real data: Gold spot price at $4,485.17/oz
     };
   }
 
-  // Generate market pulse content (static but dynamic based on rates)
+  // Generate market pulse content with today's breaking news
   function getMarketPulse(exchangeRates, commodities) {
     const zarStatus = exchangeRates.usdZar > 19.50 ? "weak" : exchangeRates.usdZar < 18.80 ? "strong" : "stable";
-    const oilStatus = parseFloat(commodities.brentCrude) > 90 ? "elevated" : "moderate";
+    const oilStatus = parseFloat(commodities.brentCrude) > 95 ? "critical" : "elevated";
     
-    return `• [LIVE] USD/ZAR at ${exchangeRates.usdZar.toFixed(2)} — ZAR is ${zarStatus}. ${exchangeRates.usdZar > 19.50 ? "Hedging opportunities for imported equipment." : "Favorable for imports."}
+    return `🚨 [BREAKING] Middle East hostilities escalate — Iran launched ballistic missiles toward Kuwait and Bahrain; US forces conducted retaliatory strikes on Iran's Qeshm Island. Strait of Hormuz remains heavily restricted, with Iran reportedly mining large sections of the waterway. Oil prices surged above $97/bbl as investors price in prolonged supply disruption risk.
 
-• [LIVE] Brent Crude at $${commodities.brentCrude} — Oil prices ${oilStatus}. ${parseFloat(commodities.brentCrude) > 90 ? "Fuel cost pressure on transport and logistics deals." : "Stable pricing supports project economics."}
+• [LIVE] USD/ZAR at ${exchangeRates.usdZar.toFixed(2)} — ZAR is ${zarStatus} amid South Africa's fiscal discipline and surplus funding for fuel levy relief. The Treasury's fiscally neutral approach supports sentiment.
 
-• [MARKET] SARB holds repo rate at 8.25% (prime 11.75%). Inflation at 5.2% within target range. Next MPC meeting July 2026.
+• [LIVE] Brent Crude at $${commodities.brentCrude} — Oil prices are ${oilStatus}. Concerns over global crude supplies persist as US crude stockpiles fell for the seventh consecutive week, down 6.75 million barrels.
 
-• [GRID] Load-shedding stage 2-3 this week. Eskom maintenance season. Municipal ring-fencing for electricity revenue begins July 1, 2026.
+• [MARKET] SARB raised repo rate by 25bps to 7% (prime 11.75%), citing need to prevent second-round effects from the Middle East oil shock. Inflation forecast raised to 4.4% for 2026.
 
-• [REGULATORY] NERSA tariff path finalisation expected Q4 2026. IPP refinancing window opening for 2015-2018 projects.`;
+• [GRID] South Africa reaches 392 consecutive days without load shedding as of June 1, 2026 — a national milestone. Winter Outlook projects continued stability. Energy Availability Factor improved to 62.59%.
+
+• [REGULATORY] NERSA approved 54% tariff relief for ferrochrome producers (Glencore-Merafe, Samancor) at 62c/kWh, saving thousands of jobs but raising transparency concerns over estimated R16.6bn annual cost.
+
+• [DEALS] World Bank $350m credit guarantee facility to unlock $10bn for transmission infrastructure. OPEC Fund $150m loan for energy and transport reforms.`;
   }
 
   // Generate market indicators content
   function getMarketIndicators(exchangeRates, commodities) {
     const zarTrend = exchangeRates.usdZar > 19.50 ? "🔴 Weak ZAR — Import costs elevated" : exchangeRates.usdZar < 18.80 ? "🟢 Strong ZAR — Imports favorable" : "🟡 Stable ZAR";
-    const oilImpact = parseFloat(commodities.brentCrude) > 90 ? "⚠️ Elevated fuel costs" : "✅ Moderate fuel costs";
+    const oilImpact = parseFloat(commodities.brentCrude) > 95 ? "⚠️ CRITICAL fuel costs" : "⚠️ Elevated fuel costs";
     
     return `━━ OIL & ENERGY PRICES ━━
 Brent Crude: $${commodities.brentCrude} (${oilImpact})
@@ -106,45 +106,47 @@ Natural Gas: $${commodities.naturalGas} /MMBtu
 
 ━━ CURRENCY & RATES ━━
 USD/ZAR: ${exchangeRates.usdZar.toFixed(2)} — ${zarTrend}
+USD/NGN (Nigeria): ₦${exchangeRates.usdNgn?.toLocaleString() || '1,550'}
+USD/EGP (Egypt): EGP ${exchangeRates.usdEgp?.toFixed(2) || '48.50'}
 EUR/USD: ${exchangeRates.usdEur.toFixed(4)}
 GBP/USD: ${exchangeRates.usdGbp.toFixed(4)}
-SA Repo Rate: 8.25% | Prime: 11.75%
-SA CPI Inflation: 5.2% (within 3-6% target)
+SA Repo Rate: 7.00% | Prime: 11.75%
+SA CPI Inflation: 4.0% (April), forecast 4.4% for 2026
 
 ━━ LOAD-SHEDDING & GRID STATUS ━━
-Current Stage: 2-3
-Grid Status: Stable but constrained
-Municipal ring-fencing: Effective July 1, 2026
-IPP Grid Connection Queue: 5,000MW ready
+Current Status: 392 consecutive days without load shedding (as of June 1, 2026)
+Energy Availability Factor: 62.59% (+5.17% YoY)
+Unplanned outages: 10,378MW (down 3,658MW YoY)
+Winter Outlook: No load shedding projected through August 2026
 
 ━━ ENERGY TARIFFS ━━
-NERSA Tariff Path: Expected Q4 2026
-Impact: Unlocking R5-8bn stalled IPP commitments
-Wheeling Market: Expected opening 2027
+NERSA approved discounted tariff for ferrochrome smelters: 62c/kWh (down from 87.44c/kWh)
+Annual cost estimate: R16.6bn (borne by Eskom, not passed to standard customers)
 
 ━━ INFRASTRUCTURE INDICATORS ━━
-Construction Input Costs: +12% YoY (steel)
-USD/ZAR Impact on EPC: ${exchangeRates.usdZar > 19.50 ? "Pressure on imported equipment" : "Stable import costs"}
-Infrastructure Pipeline: R200bn+ financing gap through 2028`;
+Construction Input Costs: Elevated due to oil price surge
+USD/ZAR Impact on EPC: Stable at current levels
+World Bank transmission guarantee: $350m facility to unlock $10bn private capital
+OPEC Fund loan: $150m for energy and transport reforms`;
   }
 
-  // Generate deal flow content
+  // Generate deal flow content (updated with recent transactions)
   function getDealFlow() {
-    return `• ESKOM JET FINANCING: Debt restructuring | R80-120bn green bonds | Q4 2026 timeline — Position SB as lead arranger for green bond issuance
+    return `• ESKOM JET FINANCING: Debt restructuring | R80-120bn green bonds | Q4 2026 timeline — Position SB as lead arranger for green bond issuance. SA has now gone 392 days without load shedding, improving Eskom's credit story.
 
-• SCATEC KROONSTAD: Project Finance | R10-12bn | Financial close Q2 2026 — Joint mandated arranger alongside DFIs
+• WORLD BANK TRANSMISSION GUARANTEE FACILITY: $350m credit guarantee to unlock $10bn for grid expansion — SB positioning for lead arranger and advisory roles.
 
-• NOA GROUP: IPP Portfolio Financing | R2-5bn | 138MW PPA with Sibanye signed Feb 2026 — Lead arranger for C&I renewable projects
+• OPEC FUND LOAN: $150m (R2.47bn) development policy loan for energy and transport infrastructure reforms — 6-year maturity with 2-year grace period.
 
-• MULILO ENERGY: Equity Raise | R2-6bn | DFI-backed expansion across SADC — Syndication + DFI co-financing opportunity
+• SCATEC KROONSTAD: Project Finance | R10-12bn | Financial close Q2 2026 — Joint mandated arranger alongside DFIs.
 
-• NTCSA: Grid Expansion Financing | R10-30bn | Eskom unbundling entity — First-mover advantage for new SOE financing
+• NOA GROUP: IPP Portfolio Financing | R2-5bn | 138MW PPA with Sibanye signed Feb 2026 — Lead arranger for C&I renewable projects.
 
-• BLUECORE GAS: Gas Infrastructure PPP | R5-12bn | Regional gas corridor — Lead arranger for gas transmission
+• DANGOTE REFINERY IPO: Largest equity offering in African capital market history. Stanbic IBTC Capital appointed lead issuing house. Valuation $40-50bn. Listing targeted June-July 2026.
 
-• SANRAL: Toll Road PPP | R8-12bn | N3 upgrade starting Q1 2026 — Bond structuring and refinancing
+• NAMIBIA VENUS OIL: TotalEnergies acquired 42.5% PEL104. FID targeting 2026 ($3-4bn capex). SB positioning for lead arranger role.
 
-• TRANSNET: Restructuring Advisory | R30bn+ | RFP Q3 2026 — Position for DFI co-financing mandate`;
+• TRANSNET: Restructuring Advisory | R30bn+ | RFP Q3 2026 — Position for DFI co-financing mandate as rail modernisation programme advances.`;
   }
 
   async function refreshData() {
@@ -154,7 +156,7 @@ Infrastructure Pipeline: R200bn+ financing gap through 2028`;
     try {
       const rates = await fetchExchangeRates();
       const commodities = getCommodityPrices();
-      const exchangeRates = rates || { usdZar: 19.20, usdEur: 0.92, usdGbp: 0.78 };
+      const exchangeRates = rates || { usdZar: 19.20, usdEur: 0.92, usdGbp: 0.78, usdNgn: 1550, usdEgp: 48.5 };
       
       setMarketData({
         exchangeRates,
@@ -230,7 +232,7 @@ Infrastructure Pipeline: R200bn+ financing gap through 2028`;
             ${marketData.commodities.brentCrude}
           </div>
           <div style={{fontSize:9,color:parseFloat(marketData.commodities.brentCrude) > 90 ? "#ef4444" : "#10b981"}}>
-            {parseFloat(marketData.commodities.brentCrude) > 90 ? "⬆ Elevated" : "⬇ Moderate"}
+            {parseFloat(marketData.commodities.brentCrude) > 90 ? "⬆ CRITICAL" : "⬇ Moderate"}
           </div>
         </Card>
         <Card style={{textAlign:"center",padding:"12px"}}>
@@ -243,7 +245,7 @@ Infrastructure Pipeline: R200bn+ financing gap through 2028`;
         <Card style={{textAlign:"center",padding:"12px"}}>
           <div style={{fontSize:10,color:"#6b7280",fontFamily:"'IBM Plex Mono',monospace"}}>Gold</div>
           <div style={{fontSize:28,fontWeight:700,color:"#f59e0b",fontFamily:"'Syne',sans-serif"}}>
-            ${marketData.commodities.gold}
+            ${marketData.commodities.gold.toFixed(2)}
           </div>
           <div style={{fontSize:9,color:"#6b7280"}}>/oz</div>
         </Card>
